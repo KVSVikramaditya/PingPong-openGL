@@ -250,8 +250,6 @@ void t()
 	glColor3f(1,0,1);
 	bitmapString(GLUT_BITMAP_HELVETICA_18,"Project by:", 0.7f, -0.6f);
 	bitmapString(GLUT_BITMAP_HELVETICA_18,"K.V.S.Vikramaditya", 0.7f, -0.7f);
-	bitmapString(GLUT_BITMAP_HELVETICA_18,"B.Akash", 0.7f, -0.8f);
-	bitmapString(GLUT_BITMAP_HELVETICA_18,"M.Asad", 0.7f, -0.9f);
 	glutTimerFunc(5000,d,0);
 	glutTimerFunc(15000,q,0);
 	glutSwapBuffers();
