@@ -1,3 +1,4 @@
+Path sourceFolderPath = Paths.get(incomingFilePath, this.folderName);
 try (FileChannel channel = FileChannel.open(sourceFolderPath, StandardOpenOption.WRITE)) {
     channel.lock().release();
     System.out.println("Released lock on source folder: " + sourceFolderPath);
