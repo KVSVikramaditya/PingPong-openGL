@@ -14,6 +14,7 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -34,7 +35,8 @@ public class FileUploadAndVerifyService {
     private final String backendApiUrl = "https://gl-pilot1.transperfect.com/PD";
     private final RestTemplate restTemplate = new RestTemplate();
 
-    public void uploadAllFiles(int submissionId) {
+    public List<UploadResourceResponse> uploadAllFiles(int submissionId) {
+        List<UploadResourceResponse> uploadResponses = new ArrayList<>();
         try {
             // Get the JWT token
             String jwtToken = authService.getToken();
@@ -51,17 +53,21 @@ public class FileUploadAndVerifyService {
                     // Get the file path
                     String filePath = sourceFilePath + File.separator + metadataSourceFile.getFilename();
 
-                    // Upload the file to the backend API
-                    uploadFile(filePath, batchName, submissionId, jwtToken);
+                    // Upload the file to the backend API and store the response
+                    UploadResourceResponse uploadResponse = uploadFile(filePath, batchName, submissionId, jwtToken);
+                    if (uploadResponse != null) {
+                        uploadResponses.add(uploadResponse);
+                    }
                 }
             }
         } catch (Exception e) {
             log.error("Error while uploading files: {}", e.getMessage(), e);
             throw new RuntimeException("Error while uploading files: " + e.getMessage(), e);
         }
+        return uploadResponses;
     }
 
-    private String uploadFile(String filePath, String batchName, int submissionId, String jwtToken) {
+    private UploadResourceResponse uploadFile(String filePath, String batchName, int submissionId, String jwtToken) {
         try {
             // Create a File object for the file to upload
             File file = new File(filePath);
@@ -100,10 +106,54 @@ public class FileUploadAndVerifyService {
             }
 
             System.out.println("File uploaded successfully: " + filePath);
-            return response.getBody().getProcessId();
+            return response.getBody();
         } catch (Exception e) {
             log.error("Error uploading file: {}", e.getMessage(), e);
             throw new RuntimeException("Error uploading file: " + e.getMessage(), e);
+        }
+    }
+}
+
+
+
+package com.ms.datalink.globalDatalink.controller;
+
+import com.ms.datalink.globalDatalink.model.UploadResourceResponse;
+import com.ms.datalink.globalDatalink.service.FileUploadAndVerifyService;
+import com.ms.datalink.globalDatalink.service.SubmissionRequestGenerator;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/frontend")
+public class DocumentSubmissionController {
+
+    @Autowired
+    private FileUploadAndVerifyService fileUploadAndVerifyService;
+
+    @Autowired
+    private SubmissionRequestGenerator submissionRequestGenerator;
+
+    @PostMapping("/submitDocument")
+    public ResponseEntity<?> submitDocument() {
+        try {
+            // Assuming the submission ID is obtained after creating the submission
+            int submissionId = submissionRequestGenerator.createSubmission();  // Mocked or implemented
+
+            // Upload all files and get their upload responses
+            List<UploadResourceResponse> uploadResponses = fileUploadAndVerifyService.uploadAllFiles(submissionId);
+
+            // Return the responses
+            return ResponseEntity.ok(uploadResponses);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to submit and upload files: " + e.getMessage());
         }
     }
 }
