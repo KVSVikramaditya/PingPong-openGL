@@ -1,18 +1,17 @@
 @Component
 public class CSVReaderUtil {
 
-    public static List<MetadataSourceFile> parseMetadata(String filePath) throws IOException, CsvValidationException {
+    public static List<MetadataSourceFile> parseMetadata(BufferedReader reader) throws IOException, CsvValidationException {
         List<MetadataSourceFile> metadataList = new ArrayList<>();
         
-        // Use try-with-resources to ensure the CSVReader and FileReader are closed properly
-        try (CSVReader reader = new CSVReader(new FileReader(filePath))) {
+        try (CSVReader csvReader = new CSVReader(reader)) {
             String[] line;
-            
+
             // Skip the header line
-            reader.readNext();
-            
+            csvReader.readNext();
+
             // Read and parse each line
-            while ((line = reader.readNext()) != null) {
+            while ((line = csvReader.readNext()) != null) {
                 MetadataSourceFile metadata = new MetadataSourceFile();
                 metadata.setFilename(line[0]);
                 metadata.setFiletype(line[1]);
@@ -22,7 +21,7 @@ public class CSVReaderUtil {
                 metadataList.add(metadata);
             }
         }
-        
+
         return metadataList;
     }
 }
