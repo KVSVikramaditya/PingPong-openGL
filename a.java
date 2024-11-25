@@ -25,12 +25,12 @@ public class SubmissionRequestGenerator {
             techTracking.put("technologyProduct", "GL_PD");
             submissionRequest.set("techTracking", techTracking);
 
-            // Group files by sourceLanguage and targetLanguage(s) combination
-            Map<String, List<MetadataSourceFile>> languageGroupedFiles = new HashMap<>();
+            // Group files by individual target language
+            Map<String, List<MetadataSourceFile>> targetLanguageGroupedFiles = new HashMap<>();
             for (MetadataSourceFile file : metadataList) {
                 for (String targetLanguage : file.getTargetLanguage().split(",")) {
                     String key = file.getSourceLanguage() + "_" + targetLanguage.trim();
-                    languageGroupedFiles.computeIfAbsent(key, k -> new ArrayList<>()).add(file);
+                    targetLanguageGroupedFiles.computeIfAbsent(key, k -> new ArrayList<>()).add(file);
                 }
             }
 
@@ -38,7 +38,7 @@ public class SubmissionRequestGenerator {
             ArrayNode batchInfos = mapper.createArrayNode();
             int batchCounter = 1;
 
-            for (Map.Entry<String, List<MetadataSourceFile>> entry : languageGroupedFiles.entrySet()) {
+            for (Map.Entry<String, List<MetadataSourceFile>> entry : targetLanguageGroupedFiles.entrySet()) {
                 ObjectNode batchInfo = mapper.createObjectNode();
                 String batchName = "Batch" + batchCounter++;
                 batchInfo.put("workflowId", 2); // Replace with appropriate workflow ID
@@ -48,7 +48,7 @@ public class SubmissionRequestGenerator {
                 // Store files in batchFileMap for upload usage
                 batchFileMap.put(batchName, entry.getValue());
 
-                // Create targetLanguageInfos array
+                // Create targetLanguageInfos array with a single target language
                 ArrayNode targetLanguageInfos = mapper.createArrayNode();
                 String targetLanguage = entry.getKey().split("_")[1]; // Extract target language from the key
                 ObjectNode targetLanguageInfo = mapper.createObjectNode();
