@@ -25,38 +25,32 @@ public class SubmissionRequestGenerator {
             techTracking.put("technologyProduct", "GL_PD");
             submissionRequest.set("techTracking", techTracking);
 
-            // Group files by individual target language
-            Map<String, List<MetadataSourceFile>> targetLanguageGroupedFiles = new HashMap<>();
-            for (MetadataSourceFile file : metadataList) {
-                for (String targetLanguage : file.getTargetLanguage().split(",")) {
-                    String key = file.getSourceLanguage() + "_" + targetLanguage.trim();
-                    targetLanguageGroupedFiles.computeIfAbsent(key, k -> new ArrayList<>()).add(file);
-                }
-            }
-
             // Create batchInfos array
             ArrayNode batchInfos = mapper.createArrayNode();
             int batchCounter = 1;
 
-            for (Map.Entry<String, List<MetadataSourceFile>> entry : targetLanguageGroupedFiles.entrySet()) {
-                ObjectNode batchInfo = mapper.createObjectNode();
-                String batchName = "Batch" + batchCounter++;
-                batchInfo.put("workflowId", 2); // Replace with appropriate workflow ID
-                batchInfo.put("targetFormat", "TXLF"); // Replace with appropriate target format
-                batchInfo.put("name", batchName);
+            for (MetadataSourceFile file : metadataList) {
+                for (String targetLanguage : file.getTargetLanguage().split(",")) {
+                    // Generate a unique batch for each target language
+                    ObjectNode batchInfo = mapper.createObjectNode();
+                    String batchName = "Batch" + batchCounter++;
+                    batchInfo.put("workflowId", 2); // Replace with appropriate workflow ID
+                    batchInfo.put("targetFormat", "TXLF"); // Replace with appropriate target format
+                    batchInfo.put("name", batchName);
 
-                // Store files in batchFileMap for upload usage
-                batchFileMap.put(batchName, entry.getValue());
+                    // Add the file to batchFileMap under the batch name
+                    batchFileMap.putIfAbsent(batchName, new ArrayList<>());
+                    batchFileMap.get(batchName).add(file);
 
-                // Create targetLanguageInfos array with a single target language
-                ArrayNode targetLanguageInfos = mapper.createArrayNode();
-                String targetLanguage = entry.getKey().split("_")[1]; // Extract target language from the key
-                ObjectNode targetLanguageInfo = mapper.createObjectNode();
-                targetLanguageInfo.put("targetLanguage", targetLanguage);
-                targetLanguageInfos.add(targetLanguageInfo);
+                    // Create targetLanguageInfos array with a single target language
+                    ArrayNode targetLanguageInfos = mapper.createArrayNode();
+                    ObjectNode targetLanguageInfo = mapper.createObjectNode();
+                    targetLanguageInfo.put("targetLanguage", targetLanguage.trim());
+                    targetLanguageInfos.add(targetLanguageInfo);
 
-                batchInfo.set("targetLanguageInfos", targetLanguageInfos);
-                batchInfos.add(batchInfo);
+                    batchInfo.set("targetLanguageInfos", targetLanguageInfos);
+                    batchInfos.add(batchInfo);
+                }
             }
 
             submissionRequest.set("batchInfos", batchInfos);
