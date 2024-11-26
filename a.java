@@ -1,71 +1,113 @@
-@Service
-public class SubmissionRequestGenerator {
-    // This map will hold the association between batch names and the files associated with each batch
-    private final Map<String, List<MetadataSourceFile>> batchFileMap = new HashMap<>();
+@PostMapping("/submitDocument")
+public ResponseEntity submitDocument(@RequestBody String folderName) throws Exception {
+    this.folderName = folderName;
+    String jwtToken = AuthService.getToken();
+    String metadataFilePath = incomingFilePath + folderName + "/metadata.csv";
+    String sourceFilePath = incomingFilePath + folderName;
+    List<MetadataSourceFile> metadataList = metadataSourceFilesReader.processMetadata(metadataFilePath);
+    
+    String submissionRequestJson = submissionRequestGenerator.createSubmissionRequest(metadataList);
+    Map<String, List<MetadataSourceFile>> batchFileMap = submissionRequestGenerator.getBatchFileMap();
+    System.out.println("Generated request body: " + submissionRequestJson);
+    System.out.println("Batch File Map: " + batchFileMap);
 
-    public String createSubmissionRequest(List<MetadataSourceFile> metadataList) {
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    headers.setBearerAuth(jwtToken);
+    HttpEntity<String> requestEntity = new HttpEntity<>(submissionRequestJson, headers);
+
+    // Make the POST request to the backend API
+    ResponseEntity<CreateSubmissionResponse> response = restTemplate.exchange(
+            backendApiUrl + "/rest/v0/submissions/create",
+            HttpMethod.POST,
+            requestEntity,
+            CreateSubmissionResponse.class
+    );
+
+    if (response.getStatusCode() == HttpStatus.OK) {
+        System.out.println(response);
+        submissionId = response.getBody().getSubmissionId();
+
         try {
-            // Initialize ObjectMapper for creating JSON
-            ObjectMapper mapper = new ObjectMapper();
+            List<UploadResourceResponse> uploadResponses = fileUploadandVerifyService.uploadAllFiles(submissionId, sourceFilePath);
+            System.out.println(uploadResponses);
 
-            // Create the root object for submission request
-            ObjectNode submissionRequest = mapper.createObjectNode();
-            submissionRequest.put("name", "Test Submission With Tech Tracking 1");
-            submissionRequest.put("dueDate", 1767178799000L); // Replace with appropriate due date
-            submissionRequest.put("projectId", 136); // Replace with your project ID
-            submissionRequest.put("sourceLanguage", metadataList.get(0).getSourceLanguage());
-            submissionRequest.put("instructions", "The instructions contain general indications for linguists.");
-            submissionRequest.put("background", "The background contains additional context information.");
+            SaveFileResponse saveFileResponse = saveFileService.saveFile(submissionId);
+            Path sourceFolderPath = Paths.get(incomingFilePath, this.folderName);
 
-            // TechTracking section
-            ObjectNode techTracking = mapper.createObjectNode();
-            techTracking.put("adaptorName", "MYADPTR");
-            techTracking.put("adaptorVersion", "1.0.0");
-            techTracking.put("clientVersion", "ClientCMS 2.0");
-            techTracking.put("technologyProduct", "GL_PD");
-            submissionRequest.set("techTracking", techTracking);
-
-            // Create batchInfos array
-            ArrayNode batchInfos = mapper.createArrayNode();
-            int batchCounter = 1;
-
-            for (MetadataSourceFile file : metadataList) {
-                for (String targetLanguage : file.getTargetLanguage().split(",")) {
-                    // Generate a unique batch for each target language
-                    ObjectNode batchInfo = mapper.createObjectNode();
-                    String batchName = "Batch" + batchCounter++;
-                    batchInfo.put("workflowId", 2); // Replace with appropriate workflow ID
-                    batchInfo.put("targetFormat", "TXLF"); // Replace with appropriate target format
-                    batchInfo.put("name", batchName);
-
-                    // Add the file to batchFileMap under the batch name
-                    batchFileMap.putIfAbsent(batchName, new ArrayList<>());
-                    batchFileMap.get(batchName).add(file);
-
-                    // Create targetLanguageInfos array with a single target language
-                    ArrayNode targetLanguageInfos = mapper.createArrayNode();
-                    ObjectNode targetLanguageInfo = mapper.createObjectNode();
-                    targetLanguageInfo.put("targetLanguage", targetLanguage.trim());
-                    targetLanguageInfos.add(targetLanguageInfo);
-
-                    batchInfo.set("targetLanguageInfos", targetLanguageInfos);
-                    batchInfos.add(batchInfo);
-                }
+            if (!saveFileResponse.getStartedSubmissionIds().contains(submissionId)) {
+                System.out.println("Submission ID not found in started submissions. Aborting file transfer.");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Submission ID not found in started submissions. File transfer aborted.");
             }
 
-            submissionRequest.set("batchInfos", batchInfos);
-            submissionRequest.put("claimScope", "LANGUAGE");
+            Thread.sleep(10000);
 
-            // Convert submissionRequest to JSON string
-            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(submissionRequest);
+            List<RetrieveTargetResponse> completedTargets = pollingWithSubmissionId.getCompletedTargets(submissionId);
+            System.out.println(completedTargets);
 
+            List<Integer> processedTargetIds = processedTargetId.getProcessedTargetIds(completedTargets);
+            System.out.println("Processed Target IDs: " + processedTargetIds);
+
+            downloadFiles.downloadAndSaveFiles(backendApiUrl, submissionId, processedTargetIds, completedTargets, destinationDir);
+
+            // Append data to the existing Excel file
+            appendToExcel(metadataList, batchFileMap, completedTargets, submissionId);
+
+            return ResponseEntity.ok(uploadResponses);
         } catch (Exception e) {
-            throw new RuntimeException("Error creating submission request", e);
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to submit and upload files: " + e.getMessage());
         }
     }
 
-    // Method to get the batchFileMap for further usage like uploading files
-    public Map<String, List<MetadataSourceFile>> getBatchFileMap() {
-        return batchFileMap;
+    return new ResponseEntity(HttpStatus.BAD_GATEWAY);
+}
+
+private void appendToExcel(List<MetadataSourceFile> metadataList, Map<String, List<MetadataSourceFile>> batchFileMap, 
+                           List<RetrieveTargetResponse> completedTargets, int submissionId) {
+    String excelFilePath = destinationDir + "/table.xlsx"; // Adjust the path as needed
+    try (FileInputStream fis = new FileInputStream(excelFilePath);
+         Workbook workbook = new XSSFWorkbook(fis)) {
+
+        Sheet sheet = workbook.getSheetAt(0); // Assuming data is in the first sheet
+        int rowCount = sheet.getLastRowNum() + 1;
+
+        for (RetrieveTargetResponse target : completedTargets) {
+            Row row = sheet.createRow(rowCount++);
+            String batchName = batchFileMap.entrySet()
+                                           .stream()
+                                           .filter(entry -> entry.getValue().contains(metadataList.get(0)))
+                                           .findFirst()
+                                           .map(Map.Entry::getKey)
+                                           .orElse("Unknown Batch");
+
+            // Populate the row
+            row.createCell(0).setCellValue(target.getDocumentName()); // Sourcefilename
+            row.createCell(1).setCellValue(target.getFileFormatName()); // Filetype
+            row.createCell(2).setCellValue(target.getDocumentName().split("\\.")[0] + "_" + target.getTargetLanguage().substring(0, 2)); // TargetfileName
+            row.createCell(3).setCellValue(target.getDocumentId()); // Source_content_id
+            row.createCell(4).setCellValue(target.getSourceLanguage()); // Source_language
+            row.createCell(5).setCellValue(target.getTargetLanguage()); // Target_language
+            row.createCell(6).setCellValue(target.getJobId()); // Jobid
+            row.createCell(7).setCellValue(submissionId); // SubmissionId
+            row.createCell(8).setCellValue(batchName); // Batchname
+            row.createCell(9).setCellValue(target.getDocumentName()); // DocumentName
+            row.createCell(10).setCellValue(target.getTargetLanguage()); // Targetlanguage
+            row.createCell(11).setCellValue(target.getDocumentId()); // Documentid
+            row.createCell(12).setCellValue(target.getTargetId()); // Targetid
+            row.createCell(13).setCellValue(target.getStatus()); // Status
+        }
+
+        // Write back to the file
+        try (FileOutputStream fos = new FileOutputStream(excelFilePath)) {
+            workbook.write(fos);
+        }
+        System.out.println("Excel file updated: " + excelFilePath);
+
+    } catch (Exception e) {
+        System.out.println("Error updating Excel file");
+        e.printStackTrace();
     }
 }
