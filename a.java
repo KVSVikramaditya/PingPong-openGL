@@ -92,6 +92,10 @@ public class DownloadAndSaveFiles {
             Files.createDirectories(folderPath);
             log.info("Files will be saved in: {}", folderPath);
 
+            List<String[]> metadataEntries = new ArrayList<>();
+            metadataEntries.add(new String[]{"Sourcefilename", "TargetfileName", "SubmissionId", "TargetID",
+                    "TargetLanguage", "SourceLanguage", "Status"}); // Metadata header
+
             // Download files for the current submissionId and target IDs
             for (RetrieveTargetResponse target : completedTargets) {
                 if (!targetIds.contains(Integer.parseInt(target.getTargetId()))) {
@@ -123,6 +127,17 @@ public class DownloadAndSaveFiles {
                         Path filePathToSave = folderPath.resolve(targetFileName);
                         Files.write(filePathToSave, response.getBody());
                         log.info("File saved: {}", filePathToSave);
+
+                        // Add metadata entry for the file
+                        metadataEntries.add(new String[]{
+                                originalFileName, // Sourcefilename
+                                targetFileName,   // TargetfileName
+                                String.valueOf(submissionId), // SubmissionId
+                                target.getTargetId(),          // TargetID
+                                target.getTargetLanguage(),    // TargetLanguage
+                                target.getSourceLanguage(),    // SourceLanguage
+                                "DOWNLOADED"                   // Status
+                        });
                     } else {
                         log.warn("Failed to download file for targetId: {}. HTTP Status: {}",
                                 target.getTargetId(), response.getStatusCode());
@@ -131,6 +146,9 @@ public class DownloadAndSaveFiles {
                     log.error("Error while downloading file for targetId: {}", target.getTargetId(), e);
                 }
             }
+
+            // Save metadata.csv in the same folder
+            saveMetadataCsv(folderPath.resolve("metadata.csv"), metadataEntries);
         }
 
         // Update statuses in the CSV file
@@ -150,5 +168,15 @@ public class DownloadAndSaveFiles {
         }
 
         log.info("CSV file updated successfully: {}", csvFilePath);
+    }
+
+    private void saveMetadataCsv(Path csvFilePath, List<String[]> metadataEntries) {
+        try (Writer writer = Files.newBufferedWriter(csvFilePath);
+             CSVWriter csvWriter = new CSVWriter(writer)) {
+            csvWriter.writeAll(metadataEntries);
+            log.info("Metadata saved as CSV: {}", csvFilePath);
+        } catch (IOException e) {
+            log.error("Error while saving metadata.csv: {}", csvFilePath, e);
+        }
     }
 }
