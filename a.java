@@ -41,6 +41,13 @@ public class AppendToCsv {
             }
 
             for (RetrieveTargetResponse target : completedTargets) {
+                // Determine the source content ID from metadataList
+                String sourceContentId = metadataList.stream()
+                        .filter(metadata -> metadata.getFileName().equals(target.getDocumentName()))
+                        .map(MetadataSourceFile::getSourceContentId)
+                        .findFirst()
+                        .orElse("Unknown Content ID");
+
                 // Determine batch name
                 String batchName = batchFileMap.entrySet()
                         .stream()
@@ -58,7 +65,7 @@ public class AppendToCsv {
                         target.getDocumentName(),                   // Sourcefilename
                         target.getFileFormatName(),                 // Filetype
                         targetFileName,                             // TargetfileName
-                        target.getDocumentId(),                     // Source_content_id
+                        sourceContentId,                            // Source_content_id (from metadataList)
                         target.getSourceLanguage(),                 // Source_language
                         target.getTargetLanguage(),                 // Target_language
                         target.getJobId(),                          // Jobid
