@@ -57,17 +57,16 @@ public class DownloadAndSaveFiles {
         List<String[]> dataRows = allRows.subList(1, allRows.size());
 
         // Group rows by submissionId and collect target IDs
-        Map<Integer, List<Integer>> submissionTargetMap = new HashMap<>();
+        Map<Integer, List<String[]>> submissionTargetMap = new HashMap<>();
         List<RetrieveTargetResponse> completedTargets = new ArrayList<>();
         for (String[] row : dataRows) {
             String status = row[13]; // Assuming 'Status' is the 14th column (index 13)
             if ("PROCESSED".equalsIgnoreCase(status)) {
                 int submissionId = Integer.parseInt(row[7]); // SubmissionId column
-                int targetId = Integer.parseInt(row[12]); // TargetId column
-                submissionTargetMap.computeIfAbsent(submissionId, k -> new ArrayList<>()).add(targetId);
+                submissionTargetMap.computeIfAbsent(submissionId, k -> new ArrayList<>()).add(row);
 
                 RetrieveTargetResponse targetResponse = new RetrieveTargetResponse();
-                targetResponse.setTargetId(row[12]);
+                targetResponse.setTargetId(row[12]);  // TargetId
                 targetResponse.setDocumentName(row[0]); // Sourcefilename
                 targetResponse.setTargetLanguage(row[5]); // Target_language
                 targetResponse.setSourceLanguage(row[4]); // Source_language
@@ -82,9 +81,9 @@ public class DownloadAndSaveFiles {
         }
 
         // Process each submissionId and its target IDs
-        for (Map.Entry<Integer, List<Integer>> entry : submissionTargetMap.entrySet()) {
+        for (Map.Entry<Integer, List<String[]>> entry : submissionTargetMap.entrySet()) {
             int submissionId = entry.getKey();
-            List<Integer> targetIds = entry.getValue();
+            List<String[]> targetRows = entry.getValue();
 
             // Create a timestamped folder for saving the downloaded files
             String timestamp = String.valueOf(System.currentTimeMillis());
@@ -94,16 +93,15 @@ public class DownloadAndSaveFiles {
 
             List<String[]> metadataEntries = new ArrayList<>();
             metadataEntries.add(new String[]{"Sourcefilename", "TargetfileName", "SubmissionId", "TargetID",
-                    "TargetLanguage", "SourceLanguage", "Status"}); // Metadata header
+                    "TargetLanguage", "SourceLanguage", "SourceAccountId", "Status"}); // Metadata header
 
             // Download files for the current submissionId and target IDs
-            for (RetrieveTargetResponse target : completedTargets) {
-                if (!targetIds.contains(Integer.parseInt(target.getTargetId()))) {
-                    continue;
-                }
+            for (String[] targetRow : targetRows) {
+                String targetId = targetRow[12]; // TargetId
+                String sourceAccountId = targetRow[3]; // SourceAccountId (assumed to be the 4th column, index 3)
 
-                String targetLanguageCode = target.getTargetLanguage().substring(0, 2);
-                String originalFileName = target.getDocumentName();
+                String targetLanguageCode = targetRow[5].substring(0, 2); // Target_language (index 5)
+                String originalFileName = targetRow[0]; // Sourcefilename
                 String baseFileName = originalFileName.contains(".")
                         ? originalFileName.substring(0, originalFileName.lastIndexOf("."))
                         : originalFileName;
@@ -113,7 +111,7 @@ public class DownloadAndSaveFiles {
                 String targetFileName = baseFileName + "_" + targetLanguageCode + fileExtension;
 
                 String url = String.format("%s/rest/v0/submissions/%d/targets/%s/download/deliverable",
-                        backendApiUrl, submissionId, target.getTargetId());
+                        backendApiUrl, submissionId, targetId);
                 log.info("Downloading from URL: {}", url);
 
                 try {
@@ -130,20 +128,21 @@ public class DownloadAndSaveFiles {
 
                         // Add metadata entry for the file
                         metadataEntries.add(new String[]{
-                                originalFileName, // Sourcefilename
-                                targetFileName,   // TargetfileName
+                                originalFileName,       // Sourcefilename
+                                targetFileName,         // TargetfileName
                                 String.valueOf(submissionId), // SubmissionId
-                                target.getTargetId(),          // TargetID
-                                target.getTargetLanguage(),    // TargetLanguage
-                                target.getSourceLanguage(),    // SourceLanguage
-                                "DOWNLOADED"                   // Status
+                                targetId,               // TargetID
+                                targetRow[5],           // TargetLanguage
+                                targetRow[4],           // SourceLanguage
+                                sourceAccountId,        // SourceAccountId
+                                "DOWNLOADED"            // Status
                         });
                     } else {
                         log.warn("Failed to download file for targetId: {}. HTTP Status: {}",
-                                target.getTargetId(), response.getStatusCode());
+                                targetId, response.getStatusCode());
                     }
                 } catch (Exception e) {
-                    log.error("Error while downloading file for targetId: {}", target.getTargetId(), e);
+                    log.error("Error while downloading file for targetId: {}", targetId, e);
                 }
             }
 
