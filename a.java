@@ -1,9 +1,12 @@
 package com.ms.datalink.globalDatalink.service;
 
 import com.ms.datalink.globalDatalink.model.RetrieveTargetResponse;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVWriter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -11,8 +14,7 @@ import org.springframework.web.client.RestTemplate;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVWriter;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
@@ -28,11 +30,14 @@ public class DownloadAndSaveFiles {
     @Value("${targetmetadata.outgoing.file.directory}")
     private String destinationDir;
 
+    @Value("${metadata.table.file.directory}")
+    private String destinationDir1;
+
     @Value("${backend.api.url}")
     private String backendApiUrl;
 
     public void processAndDownloadFiles() throws IOException {
-        String csvFilePath = destinationDir + "/table.csv";
+        String csvFilePath = destinationDir1 + "/table.csv";
         Path filePath = Paths.get(csvFilePath);
 
         if (!Files.exists(filePath)) {
@@ -56,34 +61,68 @@ public class DownloadAndSaveFiles {
         String[] header = allRows.get(0);
         List<String[]> dataRows = allRows.subList(1, allRows.size());
 
-        // Group rows by submissionId and collect target IDs
-        Map<Integer, List<String[]>> submissionTargetMap = new HashMap<>();
-        List<RetrieveTargetResponse> completedTargets = new ArrayList<>();
-        for (String[] row : dataRows) {
-            String status = row[13]; // Assuming 'Status' is the 14th column (index 13)
-            if ("PROCESSED".equalsIgnoreCase(status)) {
-                int submissionId = Integer.parseInt(row[7]); // SubmissionId column
-                submissionTargetMap.computeIfAbsent(submissionId, k -> new ArrayList<>()).add(row);
+        // Set to track processed submission IDs to avoid duplicates
+        Set<Integer> processedSubmissionIds = new HashSet<>();
 
-                RetrieveTargetResponse targetResponse = new RetrieveTargetResponse();
-                targetResponse.setTargetId(row[12]);  // TargetId
-                targetResponse.setDocumentName(row[0]); // Sourcefilename
-                targetResponse.setTargetLanguage(row[5]); // Target_language
-                targetResponse.setSourceLanguage(row[4]); // Source_language
-                targetResponse.setStatus("DOWNLOADED");
-                completedTargets.add(targetResponse);
+        // Poll READY or PROCESSING stages
+        List<String[]> readyOrProcessingRows = dataRows.stream()
+                .filter(row -> ("READY".equalsIgnoreCase(row[13]) || "PROCESSING".equalsIgnoreCase(row[13]))
+                        && !processedSubmissionIds.contains(Integer.parseInt(row[7]))) // Skip already processed submissions
+                .collect(Collectors.toList());
+
+        for (String[] row : readyOrProcessingRows) {
+            int submissionId = Integer.parseInt(row[7]);
+            processedSubmissionIds.add(submissionId); // Add to processed set
+
+            String targetId = row[12];
+
+            // Poll the endpoint to check the latest status
+            String pollUrl = String.format("%s/rest/v0/submissions/%d/targets/%s/status", backendApiUrl, submissionId, targetId);
+            try {
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                headers.setBearerAuth(authService.getToken());
+                ResponseEntity<Map> response = restTemplate.exchange(pollUrl, HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+
+                if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                    String latestStatus = (String) response.getBody().get("status");
+                    row[13] = latestStatus; // Update status in the table
+                }
+            } catch (Exception e) {
+                log.error("Error polling target status for Target ID: {}", targetId, e);
             }
         }
 
-        if (submissionTargetMap.isEmpty()) {
-            log.info("No PROCESSED rows found in the file.");
-            return;
+        // Write updated statuses back to the CSV file
+        try (Writer writer = Files.newBufferedWriter(filePath);
+             CSVWriter csvWriter = new CSVWriter(writer)) {
+            csvWriter.writeNext(header);
+            csvWriter.writeAll(dataRows);
+        }
+        log.info("CSV file updated with latest statuses: {}", csvFilePath);
+
+        // Process PROCESSED status
+        List<String[]> processedRows = dataRows.stream()
+                .filter(row -> "PROCESSED".equalsIgnoreCase(row[13]))
+                .collect(Collectors.toList());
+
+        // Group rows by submissionId
+        Map<Integer, List<String[]>> submissionTargetMap = new HashMap<>();
+        for (String[] row : processedRows) {
+            int submissionId = Integer.parseInt(row[7]); // SubmissionId column
+            submissionTargetMap.computeIfAbsent(submissionId, k -> new ArrayList<>()).add(row);
         }
 
         // Process each submissionId and its target IDs
         for (Map.Entry<Integer, List<String[]>> entry : submissionTargetMap.entrySet()) {
             int submissionId = entry.getKey();
             List<String[]> targetRows = entry.getValue();
+
+            // Skip duplicate processing
+            if (!processedSubmissionIds.add(submissionId)) {
+                log.info("Skipping already processed submissionId: {}", submissionId);
+                continue;
+            }
 
             // Create a timestamped folder for saving the downloaded files
             String timestamp = String.valueOf(System.currentTimeMillis());
@@ -95,13 +134,12 @@ public class DownloadAndSaveFiles {
             metadataEntries.add(new String[]{"Sourcefilename", "TargetfileName", "SubmissionId", "TargetID",
                     "TargetLanguage", "SourceLanguage", "SourceAccountId", "Status"}); // Metadata header
 
-            // Download files for the current submissionId and target IDs
-            for (String[] targetRow : targetRows) {
-                String targetId = targetRow[12]; // TargetId
-                String sourceAccountId = targetRow[3]; // SourceAccountId (assumed to be the 4th column, index 3)
+            for (String[] row : targetRows) {
+                String targetId = row[12]; // TargetId
+                String sourceAccountId = row[3]; // SourceAccountId
 
-                String targetLanguageCode = targetRow[5].substring(0, 2); // Target_language (index 5)
-                String originalFileName = targetRow[0]; // Sourcefilename
+                String targetLanguageCode = row[5].substring(0, 2); // Target_language
+                String originalFileName = row[0]; // Sourcefilename
                 String baseFileName = originalFileName.contains(".")
                         ? originalFileName.substring(0, originalFileName.lastIndexOf("."))
                         : originalFileName;
@@ -132,14 +170,16 @@ public class DownloadAndSaveFiles {
                                 targetFileName,         // TargetfileName
                                 String.valueOf(submissionId), // SubmissionId
                                 targetId,               // TargetID
-                                targetRow[5],           // TargetLanguage
-                                targetRow[4],           // SourceLanguage
+                                row[5],                 // TargetLanguage
+                                row[4],                 // SourceLanguage
                                 sourceAccountId,        // SourceAccountId
                                 "DOWNLOADED"            // Status
                         });
+
+                        // Update the row status
+                        row[13] = "DOWNLOADED";
                     } else {
-                        log.warn("Failed to download file for targetId: {}. HTTP Status: {}",
-                                targetId, response.getStatusCode());
+                        log.warn("Failed to download file for targetId: {}. HTTP Status: {}", targetId, response.getStatusCode());
                     }
                 } catch (Exception e) {
                     log.error("Error while downloading file for targetId: {}", targetId, e);
@@ -150,22 +190,12 @@ public class DownloadAndSaveFiles {
             saveMetadataCsv(folderPath.resolve("metadata.csv"), metadataEntries);
         }
 
-        // Update statuses in the CSV file
-        for (String[] row : dataRows) {
-            String targetId = row[12]; // TargetId column
-            if (completedTargets.stream()
-                    .anyMatch(target -> target.getTargetId().equals(targetId))) {
-                row[13] = "DOWNLOADED"; // Update status to DOWNLOADED
-            }
-        }
-
         // Write updated data back to the CSV file
         try (Writer writer = Files.newBufferedWriter(filePath);
              CSVWriter csvWriter = new CSVWriter(writer)) {
             csvWriter.writeNext(header);
             csvWriter.writeAll(dataRows);
         }
-
         log.info("CSV file updated successfully: {}", csvFilePath);
     }
 
