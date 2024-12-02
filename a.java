@@ -1,36 +1,86 @@
-package com.ms.datalink.globalDatalink.config;
+package com.ms.datalink.globalDatalink.service;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.ssl.SSLContexts;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import javax.net.ssl.SSLContext;
 
-@Configuration
-public class SSLConfig {
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class AuthService {
 
-    @Bean
-    public RestTemplate restTemplate() throws Exception {
-        // Create an SSL context that trusts all certificates
-        SSLContext sslContext = SSLContexts.custom()
-                .loadTrustMaterial((chain, authType) -> true)
-                .build();
+    @Value("${jwt.token.url}")
+    private String jwtTokenUrl;
 
-        SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
-                sslContext, NoopHostnameVerifier.INSTANCE);
+    @Value("${pd.api.client.auth}")
+    private String clientAuth;
 
-        CloseableHttpClient httpClient = HttpClients.custom()
-                .setSSLSocketFactory(socketFactory)
-                .build();
+    @Value("${pd.api.username}")
+    private String username;
 
-        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+    @Value("${pd.api.password}")
+    private String password;
 
-        return new RestTemplate(factory);
+    private final RestTemplate restTemplate = createRestTemplate();
+
+    public String getToken() {
+        HttpHeaders headers = createHeaders();
+        MultiValueMap<String, String> formData = createFormData();
+        HttpEntity<MultiValueMap<String, String>> requestEntity = new HttpEntity<>(formData, headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(jwtTokenUrl, HttpMethod.POST, requestEntity, String.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                JsonObject jsonObject = JsonParser.parseString(response.getBody()).getAsJsonObject();
+                return jsonObject.get("access_token").getAsString();
+            } else {
+                throw new RuntimeException("Failed to fetch token: " + response.getStatusCode());
+            }
+        } catch (Exception e) {
+            log.error("Error while fetching JWT token", e);
+            throw new RuntimeException("Error while fetching JWT token", e);
+        }
+    }
+
+    private HttpHeaders createHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.set("Authorization", "Basic " + clientAuth);
+        return headers;
+    }
+
+    private MultiValueMap<String, String> createFormData() {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add("grant_type", "password");
+        formData.add("username", username);
+        formData.add("password", password);
+        return formData;
+    }
+
+    private RestTemplate createRestTemplate() {
+        try {
+            SSLContext sslContext = SSLContexts.custom().loadTrustMaterial((chain, authType) -> true).build();
+            SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE);
+            CloseableHttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+            return new RestTemplate(new HttpComponentsClientHttpRequestFactory(httpClient));
+        } catch (Exception e) {
+            log.error("Error creating SSL RestTemplate", e);
+            throw new RuntimeException(e);
+        }
     }
 }
