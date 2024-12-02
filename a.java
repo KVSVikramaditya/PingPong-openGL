@@ -1,26 +1,48 @@
-package com.ms.datalink.globalDatalink.service;
+package com.ms.datalink.globalDatalink.config;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.ssl.SSLContexts;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import javax.net.ssl.SSLContext;
 
+@Configuration
+public class RestTemplateConfig {
+
+    @Bean
+    public RestTemplate restTemplate() {
+        try {
+            SSLContext sslContext = SSLContexts.custom()
+                    .loadTrustMaterial((chain, authType) -> true)
+                    .build();
+
+            SSLConnectionSocketFactory socketFactory =
+                    new SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE);
+
+            CloseableHttpClient httpClient = HttpClients.custom()
+                    .setSSLSocketFactory(socketFactory)
+                    .build();
+
+            HttpComponentsClientHttpRequestFactory requestFactory =
+                    new HttpComponentsClientHttpRequestFactory(httpClient);
+
+            return new RestTemplate(requestFactory);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create RestTemplate with SSL support", e);
+        }
+    }
+}
+
+
 @Service
 @Slf4j
-public class OAuthService {
+public class AuthService {
 
     @Value("${jwt.token.url}")
     private String jwtTokenUrl;
@@ -36,8 +58,9 @@ public class OAuthService {
 
     private final RestTemplate restTemplate;
 
-    public AuthService() {
-        this.restTemplate = createRestTemplate();
+    @Autowired
+    public AuthService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
     }
 
     public String getToken() {
@@ -63,26 +86,6 @@ public class OAuthService {
         } catch (Exception e) {
             log.error("Error while fetching JWT token", e);
             throw new RuntimeException("Error while fetching JWT token", e);
-        }
-    }
-
-    private RestTemplate createRestTemplate() {
-        try {
-            SSLContext sslContext = SSLContexts.custom()
-                    .loadTrustMaterial((chain, authType) -> true)
-                    .build();
-
-            SSLConnectionSocketFactory socketFactory =
-                    new SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE);
-
-            CloseableHttpClient httpClient = HttpClients.custom()
-                    .setSSLSocketFactory(socketFactory)
-                    .build();
-
-            return new RestTemplate(new HttpComponentsClientHttpRequestFactory(httpClient));
-        } catch (Exception e) {
-            log.error("Error creating SSL RestTemplate", e);
-            throw new RuntimeException(e);
         }
     }
 }
