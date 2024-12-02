@@ -2,7 +2,6 @@ package com.ms.datalink.globalDatalink.service;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
@@ -21,8 +20,7 @@ import javax.net.ssl.SSLContext;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
-public class AuthService {
+public class OAuthService {
 
     @Value("${jwt.token.url}")
     private String jwtTokenUrl;
@@ -36,11 +34,22 @@ public class AuthService {
     @Value("${pd.api.password}")
     private String password;
 
-    private final RestTemplate restTemplate = createRestTemplate();
+    private final RestTemplate restTemplate;
+
+    public AuthService() {
+        this.restTemplate = createRestTemplate();
+    }
 
     public String getToken() {
-        HttpHeaders headers = createHeaders();
-        MultiValueMap<String, String> formData = createFormData();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.set("Authorization", "Basic " + clientAuth);
+
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add("grant_type", "password");
+        formData.add("username", username);
+        formData.add("password", password);
+
         HttpEntity<MultiValueMap<String, String>> requestEntity = new HttpEntity<>(formData, headers);
 
         try {
@@ -57,26 +66,19 @@ public class AuthService {
         }
     }
 
-    private HttpHeaders createHeaders() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.set("Authorization", "Basic " + clientAuth);
-        return headers;
-    }
-
-    private MultiValueMap<String, String> createFormData() {
-        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-        formData.add("grant_type", "password");
-        formData.add("username", username);
-        formData.add("password", password);
-        return formData;
-    }
-
     private RestTemplate createRestTemplate() {
         try {
-            SSLContext sslContext = SSLContexts.custom().loadTrustMaterial((chain, authType) -> true).build();
-            SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE);
-            CloseableHttpClient httpClient = HttpClients.custom().setSSLSocketFactory(socketFactory).build();
+            SSLContext sslContext = SSLContexts.custom()
+                    .loadTrustMaterial((chain, authType) -> true)
+                    .build();
+
+            SSLConnectionSocketFactory socketFactory =
+                    new SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE);
+
+            CloseableHttpClient httpClient = HttpClients.custom()
+                    .setSSLSocketFactory(socketFactory)
+                    .build();
+
             return new RestTemplate(new HttpComponentsClientHttpRequestFactory(httpClient));
         } catch (Exception e) {
             log.error("Error creating SSL RestTemplate", e);
