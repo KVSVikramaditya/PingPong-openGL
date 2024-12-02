@@ -1,99 +1,113 @@
+package com.ms.datalink.globalDatalink.config;
+
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.ssl.SSLContexts;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.web.client.RestTemplate;
+
+import javax.net.ssl.SSLContext;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+
+@Configuration
+public class SSLConfig {
+
+    @Bean
+    public RestTemplate restTemplate(RestTemplateBuilder builder)
+            throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
+        // Create custom SSL context
+        SSLContext sslContext = SSLContexts.custom()
+                .loadTrustMaterial((chain, authType) -> true) // Trust all certificates
+                .build();
+
+        SSLConnectionSocketFactory csf = new SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE);
+
+        CloseableHttpClient httpClient = HttpClients.custom()
+                .setSSLSocketFactory(csf)
+                .build();
+
+        HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
+
+        // Build RestTemplate with custom SSL
+        return builder
+                .requestFactory(() -> requestFactory)
+                .setConnectTimeout(30000)
+                .setReadTimeout(30000)
+                .build();
+    }
+}
+
 package com.ms.datalink.globalDatalink.service;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
-import org.apache.http.ssl.SSLContexts;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 
-import javax.net.ssl.SSLContext;
-import java.security.GeneralSecurityException;
-import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.Map;
 
+@Service
 @Slf4j
 @RequiredArgsConstructor
-@Component
 public class AuthService {
 
     @Value("${pd.api.url}")
     private String pdApiUrl;
 
     @Value("${pd.api.client.auth}")
-    private String clientAuth; // Base64 encoded client ID and secret
+    private String clientAuth; // Base64 encoded client id and secret
 
-    @Value("${oauth.token.url}")
+    @Value("${pd.api.username}")
+    private String username;
+
+    @Value("${pd.api.password}")
+    private String password;
+
+    @Value("${jwt.token.url}")
     private String jwtTokenUrl;
 
     private final RestTemplate restTemplate;
 
-    /**
-     * Initializes a RestTemplate with SSL configuration.
-     */
-    private RestTemplate initRestTemplate() {
-        try {
-            SSLContext sslContext = SSLContexts.custom()
-                    .loadTrustMaterial((chain, authType) -> true) // Trust all certificates
-                    .build();
-
-            PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
-            connectionManager.setMaxTotal(200);
-            connectionManager.setDefaultMaxPerRoute(50);
-
-            CloseableHttpClient httpClient = HttpClients.custom()
-                    .setSSLContext(sslContext)
-                    .setConnectionManager(connectionManager)
-                    .build();
-
-            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
-            factory.setConnectTimeout(30000);
-            factory.setReadTimeout(30000);
-
-            return new RestTemplate(factory);
-        } catch (GeneralSecurityException e) {
-            log.error("Error initializing RestTemplate with SSL: ", e);
-            throw new RuntimeException("Failed to initialize RestTemplate with SSL", e);
-        }
-    }
-
-    /**
-     * Fetches a JWT token from the OAuth service.
-     *
-     * @return The JWT token.
-     */
     public String getToken() {
-        RestTemplate secureRestTemplate = initRestTemplate();
-
+        // Prepare headers
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         headers.set("Authorization", "Basic " + clientAuth);
 
+        // Prepare form data
         Map<String, String> formData = new HashMap<>();
         formData.put("grant_type", "password");
-        formData.put("username", "morganstanley_rest_api_user");
-        formData.put("password", "Morst@n!3y");
+        formData.put("username", username);
+        formData.put("password", password);
 
         HttpEntity<Map<String, String>> request = new HttpEntity<>(formData, headers);
 
         try {
-            ResponseEntity<String> response = secureRestTemplate.exchange(
+            ResponseEntity<String> response = restTemplate.exchange(
                     jwtTokenUrl, HttpMethod.POST, request, String.class);
 
-            log.info("Token response: {}", response.getBody());
-            JsonObject jsonObject = JsonParser.parseString(response.getBody()).getAsJsonObject();
-            return jsonObject.get("access_token").getAsString();
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                JsonObject jsonObject = JsonParser.parseString(response.getBody()).getAsJsonObject();
+                log.info("Successfully retrieved JWT token.");
+                return jsonObject.get("access_token").getAsString();
+            } else {
+                throw new RuntimeException("Failed to retrieve JWT token: " + response.getStatusCode());
+            }
         } catch (Exception e) {
-            log.error("Failed to fetch token from OAuth service: ", e);
-            throw new RuntimeException("Failed to fetch token", e);
+            log.error("Error while fetching JWT token", e);
+            throw new RuntimeException("Error while fetching JWT token", e);
         }
     }
 }
