@@ -1,53 +1,28 @@
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
-import org.apache.http.conn.ssl.TrustAllStrategy;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.ssl.SSLContexts;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.web.client.RestTemplate;
-
-import javax.net.ssl.SSLContext;
-
-@Configuration
-public class SSLConfig {
-
-    @Bean
-    public RestTemplate restTemplate() throws Exception {
-        SSLContext sslContext = SSLContexts.custom()
-                .loadTrustMaterial(null, TrustAllStrategy.INSTANCE)
-                .build();
-
-        CloseableHttpClient httpClient = HttpClients.custom()
-                .setSSLContext(sslContext)
-                .setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE)
-                .build();
-
-        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
-        factory.setConnectTimeout(30000);
-        factory.setReadTimeout(30000);
-
-        return new RestTemplate(factory);
-    }
-}
-
-
+package com.ms.datalink.globalDatalink.service;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.http.ssl.SSLContexts;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
-import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
+import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 
-@Service
+import javax.net.ssl.SSLContext;
+import java.security.GeneralSecurityException;
+import java.security.cert.X509Certificate;
+import java.util.HashMap;
+import java.util.Map;
+
 @Slf4j
 @RequiredArgsConstructor
+@Component
 public class AuthService {
 
     @Value("${pd.api.url}")
@@ -56,46 +31,69 @@ public class AuthService {
     @Value("${pd.api.client.auth}")
     private String clientAuth; // Base64 encoded client ID and secret
 
-    @Value("${pd.api.username}")
-    private String username;
-
-    @Value("${pd.api.password}")
-    private String password;
+    @Value("${oauth.token.url}")
+    private String jwtTokenUrl;
 
     private final RestTemplate restTemplate;
 
-    public String getToken() {
+    /**
+     * Initializes a RestTemplate with SSL configuration.
+     */
+    private RestTemplate initRestTemplate() {
         try {
-            // Set up form data for the token request
-            MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-            formData.add("grant_type", "password");
-            formData.add("username", username);
-            formData.add("password", password);
+            SSLContext sslContext = SSLContexts.custom()
+                    .loadTrustMaterial((chain, authType) -> true) // Trust all certificates
+                    .build();
 
-            // Set up headers with authorization
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-            headers.set("Authorization", "Basic " + clientAuth);
+            PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
+            connectionManager.setMaxTotal(200);
+            connectionManager.setDefaultMaxPerRoute(50);
 
-            // Make the token request
-            HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(formData, headers);
-            ResponseEntity<String> response = restTemplate.exchange(
-                    pdApiUrl + "/oauth/token",
-                    HttpMethod.POST,
-                    request,
-                    String.class
-            );
+            CloseableHttpClient httpClient = HttpClients.custom()
+                    .setSSLContext(sslContext)
+                    .setConnectionManager(connectionManager)
+                    .build();
 
-            if (response.getStatusCode() == HttpStatus.OK) {
-                JsonObject jsonObject = JsonParser.parseString(response.getBody()).getAsJsonObject();
-                return jsonObject.get("access_token").getAsString();
-            } else {
-                log.error("Failed to retrieve token. HTTP Status: {}", response.getStatusCode());
-                throw new RuntimeException("Failed to retrieve token.");
-            }
+            HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+            factory.setConnectTimeout(30000);
+            factory.setReadTimeout(30000);
+
+            return new RestTemplate(factory);
+        } catch (GeneralSecurityException e) {
+            log.error("Error initializing RestTemplate with SSL: ", e);
+            throw new RuntimeException("Failed to initialize RestTemplate with SSL", e);
+        }
+    }
+
+    /**
+     * Fetches a JWT token from the OAuth service.
+     *
+     * @return The JWT token.
+     */
+    public String getToken() {
+        RestTemplate secureRestTemplate = initRestTemplate();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.set("Authorization", "Basic " + clientAuth);
+
+        Map<String, String> formData = new HashMap<>();
+        formData.put("grant_type", "password");
+        formData.put("username", "morganstanley_rest_api_user");
+        formData.put("password", "Morst@n!3y");
+
+        HttpEntity<Map<String, String>> request = new HttpEntity<>(formData, headers);
+
+        try {
+            ResponseEntity<String> response = secureRestTemplate.exchange(
+                    jwtTokenUrl, HttpMethod.POST, request, String.class);
+
+            log.info("Token response: {}", response.getBody());
+            JsonObject jsonObject = JsonParser.parseString(response.getBody()).getAsJsonObject();
+            return jsonObject.get("access_token").getAsString();
         } catch (Exception e) {
-            log.error("Error fetching token", e);
-            throw new RuntimeException("Error fetching token", e);
+            log.error("Failed to fetch token from OAuth service: ", e);
+            throw new RuntimeException("Failed to fetch token", e);
         }
     }
 }
