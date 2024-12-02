@@ -1,65 +1,36 @@
-package com.ms.datalink.globalDatalink.service;
+package com.ms.datalink.globalDatalink.config;
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
-import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.ssl.SSLContexts;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
-@Service
-@Slf4j
-@RequiredArgsConstructor
-public class AuthService {
+import javax.net.ssl.SSLContext;
 
-    @Value("${jwt.token.url}")
-    private String jwtTokenUrl;
+@Configuration
+public class SSLConfig {
 
-    @Value("${pd.api.client.auth}")
-    private String clientAuth;
+    @Bean
+    public RestTemplate restTemplate() throws Exception {
+        // Create an SSL context that trusts all certificates
+        SSLContext sslContext = SSLContexts.custom()
+                .loadTrustMaterial((chain, authType) -> true)
+                .build();
 
-    @Value("${pd.api.username}")
-    private String username;
+        SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
+                sslContext, NoopHostnameVerifier.INSTANCE);
 
-    @Value("${pd.api.password}")
-    private String password;
+        CloseableHttpClient httpClient = HttpClients.custom()
+                .setSSLSocketFactory(socketFactory)
+                .build();
 
-    private final RestTemplate restTemplate;
+        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
 
-    public String getToken() {
-        // Prepare headers
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.set("Authorization", "Basic " + clientAuth);
-
-        // Prepare form data
-        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-        formData.add("grant_type", "password");
-        formData.add("username", username);
-        formData.add("password", password);
-
-        HttpEntity<MultiValueMap<String, String>> requestEntity = new HttpEntity<>(formData, headers);
-
-        try {
-            ResponseEntity<String> response = restTemplate.exchange(
-                    jwtTokenUrl, HttpMethod.POST, requestEntity, String.class);
-
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                log.info("Successfully retrieved JWT token.");
-                // Parse and return the token
-                return new com.google.gson.JsonParser()
-                        .parse(response.getBody())
-                        .getAsJsonObject()
-                        .get("access_token")
-                        .getAsString();
-            } else {
-                throw new RuntimeException("Failed to fetch token: " + response.getStatusCode());
-            }
-        } catch (Exception e) {
-            log.error("Error while fetching JWT token", e);
-            throw new RuntimeException("Error while fetching JWT token", e);
-        }
+        return new RestTemplate(factory);
     }
 }
