@@ -1,37 +1,6 @@
-package com.ms.datalink.globalDatalink.controller;
-
-import com.ms.datalink.globalDatalink.service.DocumentSubmissionService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-@RestController
-@RequestMapping("/api/frontend")
-public class DocumentSubmissionController {
-
-    @Autowired
-    private DocumentSubmissionService documentSubmissionService;
-
-    @PostMapping("/submitDocument")
-    public ResponseEntity<?> submitDocument(@RequestBody String folderName) {
-        try {
-            documentSubmissionService.processSubmission(folderName);
-            return ResponseEntity.ok("Submission processed successfully");
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body("Error processing submission: " + e.getMessage());
-        }
-    }
-}
-
-
-
-
 package com.ms.datalink.globalDatalink.service;
 
-import com.ms.datalink.globalDatalink.model.MetadataSourceFile;
-import com.ms.datalink.globalDatalink.model.RetrieveTargetResponse;
-import com.ms.datalink.globalDatalink.model.SaveFileResponse;
-import com.ms.datalink.globalDatalink.service.*;
+import com.ms.datalink.globalDatalink.model.*;
 import com.opencsv.exceptions.CsvException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -87,7 +56,11 @@ public class DocumentSubmissionService {
     @Autowired
     private DownloadAndSaveFiles downloadFiles;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Autowired
+    private AuthService authService;
+
+    @Autowired
+    private RestTemplate restTemplate;
 
     public void processSubmission(String folderName) throws IOException, CsvException, InterruptedException {
         // Step 1: Generate paths
@@ -101,9 +74,14 @@ public class DocumentSubmissionService {
         String submissionRequestJson = submissionRequestGenerator.createSubmissionRequest(metadataList);
         Map<String, List<MetadataSourceFile>> batchFileMap = submissionRequestGenerator.getBatchFileMap();
 
-        // Step 4: Make the POST request to create submission
+        // Step 4: Get JWT Token
+        String jwtToken = authService.getToken();
+
+        // Step 5: Make the POST request to create submission
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(jwtToken); // Attach JWT Token
+
         HttpEntity<String> requestEntity = new HttpEntity<>(submissionRequestJson, headers);
 
         ResponseEntity<CreateSubmissionResponse> response = restTemplate.exchange(
@@ -118,17 +96,17 @@ public class DocumentSubmissionService {
 
         int submissionId = response.getBody().getSubmissionId();
 
-        // Step 5: Upload files
+        // Step 6: Upload files
         fileUploadandVerifyService.uploadAllFiles(submissionId, sourceFilePath);
 
-        // Step 6: Save file response
+        // Step 7: Save file response
         SaveFileResponse saveFileResponse = saveFileService.saveFile(submissionId);
 
         if (!saveFileResponse.getStartedSubmissionIds().contains(submissionId)) {
             throw new RuntimeException("Submission ID not found in started submissions. Aborting file transfer.");
         }
 
-        // Step 7: Move folder from incoming to processing
+        // Step 8: Move folder from incoming to processing
         Path sourceFolderPath = Paths.get(incomingFilePath, folderName);
         Path targetFolderPath = Paths.get(processingFilePath, folderName);
 
@@ -140,18 +118,18 @@ public class DocumentSubmissionService {
 
         log.info("Folder moved to: {}", targetFolderPath);
 
-        // Step 8: Poll for completed targets
+        // Step 9: Poll for completed targets
         List<RetrieveTargetResponse> completedTargets = pollingWithSubmissionId.getCompletedTargets(submissionId);
 
-        // Step 9: Append to CSV
+        // Step 10: Append to CSV
         appendToCsv.appendToCsv(metadataList, batchFileMap, completedTargets, submissionId);
 
-        // Step 10: Get processed target IDs
+        // Step 11: Get processed target IDs
         List<Integer> processedTargetIds = processedTargetId.getProcessedTargetIds(completedTargets);
 
         log.info("Processed Target IDs: {}", processedTargetIds);
 
-        // Step 11: Download and save files
+        // Step 12: Download and save files
         downloadFiles.processAndDownloadFiles();
     }
 }
