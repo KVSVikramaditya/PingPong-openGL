@@ -1,135 +1,101 @@
-package com.ms.datalink.globalDatalink.service;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.TrustAllStrategy;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.ssl.SSLContexts;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.web.client.RestTemplate;
 
-import com.ms.datalink.globalDatalink.model.*;
-import com.opencsv.exceptions.CsvException;
+import javax.net.ssl.SSLContext;
+
+@Configuration
+public class SSLConfig {
+
+    @Bean
+    public RestTemplate restTemplate() throws Exception {
+        SSLContext sslContext = SSLContexts.custom()
+                .loadTrustMaterial(null, TrustAllStrategy.INSTANCE)
+                .build();
+
+        CloseableHttpClient httpClient = HttpClients.custom()
+                .setSSLContext(sslContext)
+                .setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE)
+                .build();
+
+        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+        factory.setConnectTimeout(30000);
+        factory.setReadTimeout(30000);
+
+        return new RestTemplate(factory);
+    }
+}
+
+
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
-
-import java.io.IOException;
-import java.nio.file.*;
-import java.util.List;
-import java.util.Map;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class DocumentSubmissionService {
+public class AuthService {
 
-    @Value("${sourcemetadata.incoming.file.directory}")
-    private String incomingFilePath;
+    @Value("${pd.api.url}")
+    private String pdApiUrl;
 
-    @Value("${targetmetadata.processing.file.directory}")
-    private String processingFilePath;
+    @Value("${pd.api.client.auth}")
+    private String clientAuth; // Base64 encoded client ID and secret
 
-    @Value("${targetmetadata.outgoing.file.directory}")
-    private String destinationDir;
+    @Value("${pd.api.username}")
+    private String username;
 
-    @Value("${backend.api.url}")
-    private String backendApiUrl;
+    @Value("${pd.api.password}")
+    private String password;
 
-    @Autowired
-    private MetadataSourceFilesReader metadataSourceFilesReader;
+    private final RestTemplate restTemplate;
 
-    @Autowired
-    private SubmissionRequestGenerator submissionRequestGenerator;
+    public String getToken() {
+        try {
+            // Set up form data for the token request
+            MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+            formData.add("grant_type", "password");
+            formData.add("username", username);
+            formData.add("password", password);
 
-    @Autowired
-    private FileUploadandVerifyService fileUploadandVerifyService;
+            // Set up headers with authorization
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+            headers.set("Authorization", "Basic " + clientAuth);
 
-    @Autowired
-    private SaveFileService saveFileService;
+            // Make the token request
+            HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(formData, headers);
+            ResponseEntity<String> response = restTemplate.exchange(
+                    pdApiUrl + "/oauth/token",
+                    HttpMethod.POST,
+                    request,
+                    String.class
+            );
 
-    @Autowired
-    private PollingWithSubmissionId pollingWithSubmissionId;
-
-    @Autowired
-    private AppendToCsv appendToCsv;
-
-    @Autowired
-    private GetProcessedTargetIds processedTargetId;
-
-    @Autowired
-    private DownloadAndSaveFiles downloadFiles;
-
-    @Autowired
-    private AuthService authService;
-
-    @Autowired
-    private RestTemplate restTemplate;
-
-    public void processSubmission(String folderName) throws IOException, CsvException, InterruptedException {
-        // Step 1: Generate paths
-        String metadataFilePath = incomingFilePath + folderName + "/metadata.csv";
-        String sourceFilePath = incomingFilePath + folderName;
-
-        // Step 2: Process metadata
-        List<MetadataSourceFile> metadataList = metadataSourceFilesReader.processMetadata(metadataFilePath);
-
-        // Step 3: Generate submission request
-        String submissionRequestJson = submissionRequestGenerator.createSubmissionRequest(metadataList);
-        Map<String, List<MetadataSourceFile>> batchFileMap = submissionRequestGenerator.getBatchFileMap();
-
-        // Step 4: Get JWT Token
-        String jwtToken = authService.getToken();
-
-        // Step 5: Make the POST request to create submission
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(jwtToken); // Attach JWT Token
-
-        HttpEntity<String> requestEntity = new HttpEntity<>(submissionRequestJson, headers);
-
-        ResponseEntity<CreateSubmissionResponse> response = restTemplate.exchange(
-                backendApiUrl + "/rest/v0/submissions/create",
-                HttpMethod.POST, requestEntity, CreateSubmissionResponse.class);
-
-        if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-            log.info("Submission created: {}", response.getBody());
-        } else {
-            throw new RuntimeException("Failed to create submission");
+            if (response.getStatusCode() == HttpStatus.OK) {
+                JsonObject jsonObject = JsonParser.parseString(response.getBody()).getAsJsonObject();
+                return jsonObject.get("access_token").getAsString();
+            } else {
+                log.error("Failed to retrieve token. HTTP Status: {}", response.getStatusCode());
+                throw new RuntimeException("Failed to retrieve token.");
+            }
+        } catch (Exception e) {
+            log.error("Error fetching token", e);
+            throw new RuntimeException("Error fetching token", e);
         }
-
-        int submissionId = response.getBody().getSubmissionId();
-
-        // Step 6: Upload files
-        fileUploadandVerifyService.uploadAllFiles(submissionId, sourceFilePath);
-
-        // Step 7: Save file response
-        SaveFileResponse saveFileResponse = saveFileService.saveFile(submissionId);
-
-        if (!saveFileResponse.getStartedSubmissionIds().contains(submissionId)) {
-            throw new RuntimeException("Submission ID not found in started submissions. Aborting file transfer.");
-        }
-
-        // Step 8: Move folder from incoming to processing
-        Path sourceFolderPath = Paths.get(incomingFilePath, folderName);
-        Path targetFolderPath = Paths.get(processingFilePath, folderName);
-
-        if (!Files.exists(targetFolderPath.getParent())) {
-            Files.createDirectories(targetFolderPath.getParent());
-        }
-
-        Files.move(sourceFolderPath, targetFolderPath);
-
-        log.info("Folder moved to: {}", targetFolderPath);
-
-        // Step 9: Poll for completed targets
-        List<RetrieveTargetResponse> completedTargets = pollingWithSubmissionId.getCompletedTargets(submissionId);
-
-        // Step 10: Append to CSV
-        appendToCsv.appendToCsv(metadataList, batchFileMap, completedTargets, submissionId);
-
-        // Step 11: Get processed target IDs
-        List<Integer> processedTargetIds = processedTargetId.getProcessedTargetIds(completedTargets);
-
-        log.info("Processed Target IDs: {}", processedTargetIds);
-
-        // Step 12: Download and save files
-        downloadFiles.processAndDownloadFiles();
     }
 }
