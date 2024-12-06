@@ -1,165 +1,111 @@
-import com.fasterxml.jackson.databind.ObjectMapper;
-import msjava.base.scv.SecureCredentialsVault;
-import msjava.base.slf4j.ContextLogger;
-import org.apache.http.HttpHost;
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.conn.ssl.TrustStrategy;
-import org.apache.http.impl.client.BasicCookieStore;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
-import org.slf4j.Logger;
-import org.springframework.http.*;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
+dependencies {
+    implementation 'org.springdoc:springdoc-openapi-ui:1.7.0' // Use the latest version
+    implementation 'org.springdoc:springdoc-openapi-data-rest:1.7.0'
+    implementation 'org.springdoc:springdoc-openapi-security:1.7.0' // If using security
+}
 
-import javax.net.ssl.*;
-import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
-import java.security.KeyManagementException;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.X509Certificate;
-import java.util.Arrays;
 
-@Component
-public class TokenFeed2 {
-    private static final Logger LOGGER = ContextLogger.safeLogger();
 
-    public RestTemplate initRestTemplate() {
-        // Build OAuth2RestTemplate:
-        TrustManager[] trustAllCerts = getTrustManager();
+package com.translations.config;
 
-        // Install the all-trusting trust manager
-        try {
-            SSLContext sc = SSLContext.getInstance("SSL");
-            sc.init(null, trustAllCerts, new java.security.SecureRandom());
-            HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.License;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
-            // Create all-trusting host name verifier
-            HostnameVerifier allHostsValid = getHostNameVerifier();
-            HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
-        } catch (GeneralSecurityException e) {
-            LOGGER.error("Exception.", e);
-        }
+@Configuration
+public class SwaggerConfig {
 
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setOutputStreaming(false);
-        RestTemplate restTemplate = new RestTemplate();
-        restTemplate.setRequestFactory(requestFactory);
-        return restTemplate;
+    @Bean
+    public OpenAPI customOpenAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("Translations API")
+                        .version("1.0")
+                        .description("API documentation for the Translations Project")
+                        .contact(new Contact()
+                                .name("Support Team")
+                                .email("support@translations.com")
+                                .url("http://translations.com"))
+                        .license(new License()
+                                .name("Apache 2.0")
+                                .url("http://springdoc.org")));
+    }
+}
+
+
+
+
+package com.translations.controller;
+
+import com.translations.model.TranslationRequest;
+import com.translations.model.TranslationResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/v1/translations")
+@Tag(name = "Translations", description = "Manage translations and related resources")
+public class TranslationController {
+
+    @Operation(summary = "Submit a new translation request", description = "Creates a new translation job")
+    @PostMapping
+    public ResponseEntity<TranslationResponse> submitTranslation(@RequestBody TranslationRequest request) {
+        // Logic to handle the translation request
+        return ResponseEntity.ok(new TranslationResponse());
     }
 
-    protected TrustManager[] getTrustManager() {
-        TrustManager[] trustAllCerts = new TrustManager[]{
-                new X509TrustManager() {
-                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                        return new X509Certificate[0];
-                    }
-
-                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
-                    }
-
-                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
-                    }
-                }
-        };
-        return trustAllCerts;
+    @Operation(summary = "Get translation status", description = "Fetches the status of an existing translation job")
+    @GetMapping("/{id}")
+    public ResponseEntity<TranslationResponse> getTranslationStatus(@PathVariable String id) {
+        // Logic to fetch the translation status
+        return ResponseEntity.ok(new TranslationResponse());
     }
+}
 
-    protected HostnameVerifier getHostNameVerifier() {
-        return (hostname, session) -> hostname != null && session != null;
-    }
 
-    public String getToken() throws Exception {
-        initRestTemplate();
-        String returnedPassword = retrievePassword();
-        if (returnedPassword.isEmpty()) {
-            throw new Exception("Password retrieval failed.");
-        }
-        String token = sendTokenRequest(returnedPassword);
-        LOGGER.info("Access Token: {}", token);
-        return token;
-    }
 
-    private String retrievePassword() throws Exception {
-        SecureCredentialsVault scv = new SecureCredentialsVault();
-        String returnedPassword = new String(scv.getTextCred("im/marketing/MSIMSeismic/prod/seismic", "seismic-password"));
-        if (returnedPassword.isEmpty()) {
-            LOGGER.error("Retrieved empty password for key: seismic-password");
-        }
-        String decodedPwd = java.net.URLDecoder.decode(returnedPassword, StandardCharsets.UTF_8.name());
-        decodedPwd = decodedPwd.replace("\n", "");
-        return decodedPwd;
-    }
 
-    private String sendTokenRequest(String decodedPassword) throws Exception {
-        StringBuffer authToken = new StringBuffer();
-        RestTemplate restTemplate = initRestTemplate();
-        String uri = "https://auth.seismic.com/tenants/morganstanley/connect/token";
-        String payload = buildPayload(decodedPassword);
 
-        // Prepare Headers
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+springdoc.api-docs.enabled=true
+springdoc.swagger-ui.enabled=true
+springdoc.swagger-ui.path=/swagger-ui.html
+springdoc.api-docs.path=/v3/api-docs
 
-        // Build the HTTP entity with payload and headers
-        HttpEntity<String> requestEntity = new HttpEntity<>(payload, headers);
-        LOGGER.info("POST URL: {}", uri);
-        LOGGER.info("Headers: {}", requestEntity.getHeaders());
-        LOGGER.info("Body: {}", requestEntity.getBody());
 
-        try {
-            // Send POST request using RestTemplate
-            ResponseEntity<String> response = restTemplate.exchange(
-                    uri,
-                    HttpMethod.POST,
-                    requestEntity,
-                    String.class
-            );
 
-            // Check the status code
-            if (response.getStatusCode() != HttpStatus.OK) {
-                LOGGER.error("Failed to retrieve token, status: {}", response.getStatusCode());
-                throw new Exception("Failed to retrieve token");
-            }
 
-            // Parse the response
-            String responseBody = response.getBody();
-            ObjectMapper mapper = new ObjectMapper();
-            Token token = mapper.readValue(responseBody, Token.class);
+    package com.translations.model;
 
-            // Return the access token
-            authToken.append(token.getTokenType()).append(" ").append(token.getAccessToken());
-            return authToken.toString();
-        } catch (Exception e) {
-            LOGGER.error("Error occurred while fetching token", e);
-            throw e;
-        }
-    }
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
 
-    private String buildPayload(String password) {
-        return "grant_type=password" +
-                "&client_id=3490eed2-e3f8-431d-ac32-3c7897cfbafa" +
-                "&client_secret=4c9a9f4b-eca6-4c00-b4c5-c28e96275f8a" +
-                "&user_name=SeismicAPI@seismic.com" +
-                "&password=" + password +
-                "&scope=library%20download%20reporting";
-    }
+@Data
+@Schema(description = "Request model for translation submissions")
+public class TranslationRequest {
+    @Schema(description = "Source language of the text", example = "en")
+    private String sourceLanguage;
 
-    public static void main(String[] args) {
-        try {
-            TokenFeed2 tokenFeed = new TokenFeed2();
-            String token = tokenFeed.getToken();
-            System.out.println("Access Token: " + token);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+    @Schema(description = "Target language for the translation", example = "fr")
+    private String targetLanguage;
+
+    @Schema(description = "Text to be translated", example = "Hello, world!")
+    private String text;
+}
+
+@Data
+@Schema(description = "Response model for translation status")
+public class TranslationResponse {
+    @Schema(description = "Unique ID of the translation job", example = "12345")
+    private String jobId;
+
+    @Schema(description = "Current status of the translation job", example = "COMPLETED")
+    private String status;
+
+    @Schema(description = "Translated text", example = "Bonjour, le monde!")
+    private String translatedText;
 }
