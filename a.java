@@ -1,96 +1,78 @@
-package com.ms.datalink.globalDatalink.controller;
+@Service
+public class SubmissionRequestGenerator {
 
-import com.ms.datalink.globalDatalink.service.*;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.*;
-import org.springframework.web.bind.annotation.*;
+    private final Map<String, List<MetadataSourceFile>> batchFileMap = new HashMap<>();
 
-@RestController
-@RequestMapping("/api/frontend")
-@Tag(name = "Document Submission API", description = "API for processing document submissions and downloading files.")
-public class DocumentSubmissionController {
-
-    @Autowired
-    private DocumentSubmissionService documentSubmissionService;
-
-    @Autowired
-    private DownLoadAndSaveFiles downloadFiles;
-
-    @Operation(summary = "Submit a document for processing", description = "This endpoint processes a document by accepting a folder name.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Submission processed successfully"),
-            @ApiResponse(responseCode = "500", description = "Error processing submission")
-    })
-    @PostMapping("/submitDocument")
-    public ResponseEntity<?> submitDocument(@RequestBody String folderName) {
+    public String createSubmissionRequest(List<MetadataSourceFile> metadataList) {
         try {
-            documentSubmissionService.processSubmission(folderName);
-            return ResponseEntity.ok("Submission processed successfully");
+            // Initialize ObjectMapper for creating JSON
+            ObjectMapper mapper = new ObjectMapper();
+
+            // Create the root object for submission request
+            ObjectNode submissionRequest = mapper.createObjectNode();
+            submissionRequest.put("name", "Test Submission With Tech Tracking 1");
+            submissionRequest.put("dueDate", 1767178799000L); // Replace with actual due date
+            submissionRequest.put("projectId", 136); // Replace with your project ID
+            submissionRequest.put("sourceLanguage", metadataList.get(0).getSourceLanguage());
+            submissionRequest.put("instructions", "The instructions contain general indications for linguists.");
+            submissionRequest.put("background", "The background contains additional context information.");
+
+            // TechTracking section
+            ObjectNode techTracking = mapper.createObjectNode();
+            techTracking.put("adaptorName", "MYADPTR");
+            techTracking.put("adaptorVersion", "1.0.0");
+            techTracking.put("clientVersion", "ClientCMS 2.0");
+            techTracking.put("technologyProduct", "GL_PD");
+            submissionRequest.set("techTracking", techTracking);
+
+            // Group files by sourceLanguage and targetLanguage combination
+            Map<String, List<MetadataSourceFile>> languageGroupedFiles = new HashMap<>();
+            for (MetadataSourceFile file : metadataList) {
+                String[] targetLanguages = file.getTargetLanguage().split("\\|");
+                for (String targetLanguage : targetLanguages) {
+                    String key = file.getSourceLanguage() + "_" + targetLanguage.trim();
+                    languageGroupedFiles.computeIfAbsent(key, k -> new ArrayList<>()).add(file);
+                }
+            }
+
+            // Create batchInfos array
+            ArrayNode batchInfos = mapper.createArrayNode();
+            int batchCounter = 1;
+
+            for (Map.Entry<String, List<MetadataSourceFile>> entry : languageGroupedFiles.entrySet()) {
+                ObjectNode batchInfo = mapper.createObjectNode();
+                String batchName = "Batch" + batchCounter++;
+                batchInfo.put("workflowId", 2); // Replace with appropriate workflow ID
+                batchInfo.put("targetFormat", "TXLF"); // Replace with appropriate target format
+                batchInfo.put("name", batchName);
+
+                // Store files in batchFileMap for upload usage
+                batchFileMap.put(batchName, entry.getValue());
+
+                // Create targetLanguageInfos array
+                ArrayNode targetLanguageInfos = mapper.createArrayNode();
+                String targetLanguage = entry.getKey().split("_")[1]; // Extract target language from the key
+                ObjectNode targetLanguageInfo = mapper.createObjectNode();
+                targetLanguageInfo.put("targetLanguage", targetLanguage);
+                targetLanguageInfos.add(targetLanguageInfo);
+
+                batchInfo.set("targetLanguageInfos", targetLanguageInfos);
+                batchInfos.add(batchInfo);
+            }
+
+            submissionRequest.set("batchInfos", batchInfos);
+            submissionRequest.put("claimScope", "LANGUAGE");
+
+            // Convert submissionRequest to JSON string
+            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(submissionRequest);
+
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Error processing submission: " + e.getMessage());
+            throw new RuntimeException("Error creating submission request", e);
         }
     }
 
-    @Operation(summary = "Download files and update their status", description = "Downloads files based on their status and updates the table.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Files downloaded successfully"),
-            @ApiResponse(responseCode = "500", description = "Error processing the request")
-    })
-    @GetMapping("/downloadFiles")
-    public ResponseEntity<?> downloadFilesAndUpdateStatus() {
-        try {
-            downloadFiles.processAndDownloadFiles();
-            return ResponseEntity.ok("Files Downloaded");
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error processing the request: " + e.getMessage());
-        }
+    // Method to get the batchFileMap for further usage like uploading files
+    public Map<String, List<MetadataSourceFile>> getBatchFileMap() {
+        return batchFileMap;
     }
-}
-
-
-
-package com.ms.datalink.globalDatalink.config;
-
-import io.swagger.v3.oas.models.OpenAPI;
-import io.swagger.v3.oas.models.info.Contact;
-import io.swagger.v3.oas.models.info.Info;
-import io.swagger.v3.oas.models.info.License;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class SwaggerConfig {
-
-    @Bean
-    public OpenAPI customOpenAPI() {
-        return new OpenAPI()
-                .info(new Info()
-                        .title("Document Submission API")
-                        .version("1.0")
-                        .description("API documentation for Document Submission and File Download services.")
-                        .contact(new Contact()
-                                .name("Support Team")
-                                .email("support@datalink.com")
-                                .url("http://datalink.com"))
-                        .license(new License()
-                                .name("Apache 2.0")
-                                .url("http://springdoc.org")));
-    }
-}
-
-
-
-import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.Data;
-
-@Data
-@Schema(description = "Request model for submitting a document.")
-public class DocumentRequest {
-    @Schema(description = "Name of the folder to process.", example = "documents/folder1")
-    private String folderName;
 }
