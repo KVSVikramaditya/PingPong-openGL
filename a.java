@@ -1,16 +1,64 @@
-dependencies {
-    implementation 'org.springdoc:springdoc-openapi-ui:1.7.0' // Use the latest version
-    implementation 'org.springdoc:springdoc-openapi-data-rest:1.7.0'
-    implementation 'org.springdoc:springdoc-openapi-security:1.7.0' // If using security
+package com.ms.datalink.globalDatalink.controller;
+
+import com.ms.datalink.globalDatalink.service.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.*;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/frontend")
+@Tag(name = "Document Submission API", description = "API for processing document submissions and downloading files.")
+public class DocumentSubmissionController {
+
+    @Autowired
+    private DocumentSubmissionService documentSubmissionService;
+
+    @Autowired
+    private DownLoadAndSaveFiles downloadFiles;
+
+    @Operation(summary = "Submit a document for processing", description = "This endpoint processes a document by accepting a folder name.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Submission processed successfully"),
+            @ApiResponse(responseCode = "500", description = "Error processing submission")
+    })
+    @PostMapping("/submitDocument")
+    public ResponseEntity<?> submitDocument(@RequestBody String folderName) {
+        try {
+            documentSubmissionService.processSubmission(folderName);
+            return ResponseEntity.ok("Submission processed successfully");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Error processing submission: " + e.getMessage());
+        }
+    }
+
+    @Operation(summary = "Download files and update their status", description = "Downloads files based on their status and updates the table.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Files downloaded successfully"),
+            @ApiResponse(responseCode = "500", description = "Error processing the request")
+    })
+    @GetMapping("/downloadFiles")
+    public ResponseEntity<?> downloadFilesAndUpdateStatus() {
+        try {
+            downloadFiles.processAndDownloadFiles();
+            return ResponseEntity.ok("Files Downloaded");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error processing the request: " + e.getMessage());
+        }
+    }
 }
 
 
 
-package com.translations.config;
+package com.ms.datalink.globalDatalink.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
-import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,13 +70,13 @@ public class SwaggerConfig {
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Translations API")
+                        .title("Document Submission API")
                         .version("1.0")
-                        .description("API documentation for the Translations Project")
+                        .description("API documentation for Document Submission and File Download services.")
                         .contact(new Contact()
                                 .name("Support Team")
-                                .email("support@translations.com")
-                                .url("http://translations.com"))
+                                .email("support@datalink.com")
+                                .url("http://datalink.com"))
                         .license(new License()
                                 .name("Apache 2.0")
                                 .url("http://springdoc.org")));
@@ -37,75 +85,12 @@ public class SwaggerConfig {
 
 
 
-
-package com.translations.controller;
-
-import com.translations.model.TranslationRequest;
-import com.translations.model.TranslationResponse;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-@RestController
-@RequestMapping("/api/v1/translations")
-@Tag(name = "Translations", description = "Manage translations and related resources")
-public class TranslationController {
-
-    @Operation(summary = "Submit a new translation request", description = "Creates a new translation job")
-    @PostMapping
-    public ResponseEntity<TranslationResponse> submitTranslation(@RequestBody TranslationRequest request) {
-        // Logic to handle the translation request
-        return ResponseEntity.ok(new TranslationResponse());
-    }
-
-    @Operation(summary = "Get translation status", description = "Fetches the status of an existing translation job")
-    @GetMapping("/{id}")
-    public ResponseEntity<TranslationResponse> getTranslationStatus(@PathVariable String id) {
-        // Logic to fetch the translation status
-        return ResponseEntity.ok(new TranslationResponse());
-    }
-}
-
-
-
-
-
-springdoc.api-docs.enabled=true
-springdoc.swagger-ui.enabled=true
-springdoc.swagger-ui.path=/swagger-ui.html
-springdoc.api-docs.path=/v3/api-docs
-
-
-
-
-    package com.translations.model;
-
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
-@Schema(description = "Request model for translation submissions")
-public class TranslationRequest {
-    @Schema(description = "Source language of the text", example = "en")
-    private String sourceLanguage;
-
-    @Schema(description = "Target language for the translation", example = "fr")
-    private String targetLanguage;
-
-    @Schema(description = "Text to be translated", example = "Hello, world!")
-    private String text;
-}
-
-@Data
-@Schema(description = "Response model for translation status")
-public class TranslationResponse {
-    @Schema(description = "Unique ID of the translation job", example = "12345")
-    private String jobId;
-
-    @Schema(description = "Current status of the translation job", example = "COMPLETED")
-    private String status;
-
-    @Schema(description = "Translated text", example = "Bonjour, le monde!")
-    private String translatedText;
+@Schema(description = "Request model for submitting a document.")
+public class DocumentRequest {
+    @Schema(description = "Name of the folder to process.", example = "documents/folder1")
+    private String folderName;
 }
