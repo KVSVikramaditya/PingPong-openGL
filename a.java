@@ -1,2 +1,25 @@
-Infra Downtime: No.
-Reason: The production release involves promoting changes to the production environment, followed by a restart of the project. This process does not impact the availability of the system, ensuring there is no downtime.
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpClient;
+import org.apache.http.impl.client.BasicCookieStore;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.HttpHost;
+
+import org.apache.http.impl.client.BasicCookieStore;
+
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+
+import org.apache.http.impl.client.HttpClients;
+
+import org.apache.http.client.CredentialsProvider;
+
+import org.apache.http.impl.client.HttpComponentsClientHttpRequestFactory;
+
+import org.apache.http.client.methods.CloseableHttpClient;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.HttpHost;
+
