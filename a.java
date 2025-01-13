@@ -1,25 +1,42 @@
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpClient;
-import org.apache.http.impl.client.BasicCookieStore;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.HttpHost;
+ public static void uploadFile(String filePath, String authToken) throws IOException {
+        // Create the OkHttpClient instance
+        OkHttpClient client = new OkHttpClient();
 
-import org.apache.http.impl.client.BasicCookieStore;
+        // Define the file and read its bytes
+        File file = new File(filePath);
+        if (!file.exists()) {
+            throw new IOException("File not found: " + filePath);
+        }
+        byte[] fileBytes = Files.readAllBytes(file.toPath());
 
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
+        // Define the boundary
+        String boundary = "011000010111000001101001";
 
-import org.apache.http.impl.client.HttpClients;
+        // Create the multipart request body
+        RequestBody body = new MultipartBody.Builder(boundary)
+                .setType(MultipartBody.FORM)
+                .addFormDataPart(
+                        "content", 
+                        file.getName(),
+                        RequestBody.create(MediaType.parse("application/octet-stream"), fileBytes)
+                )
+                .build();
 
-import org.apache.http.client.CredentialsProvider;
+        // Build the HTTP request
+        Request request = new Request.Builder()
+                .url("https://api.seismic.com/integration/v2/teamsites/03793088-6c8c-40f5-9cb4-e930491dab43/files/b5b7727e-18d5-4b48-9f78-62b7111468cb/content")
+                .put(body)
+                .addHeader("Authorization", "Bearer " + authToken)
+                .addHeader("accept", "application/json; charset=utf-8")
+                .addHeader("content-type", "multipart/form-data; boundary=" + boundary)
+                .build();
 
-import org.apache.http.impl.client.HttpComponentsClientHttpRequestFactory;
-
-import org.apache.http.client.methods.CloseableHttpClient;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.HttpHost;
-
+        // Execute the request and get the response
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("Unexpected response: " + response);
+            }
+            System.out.println("Response: " + response.body().string());
+        }
+    }
+}
