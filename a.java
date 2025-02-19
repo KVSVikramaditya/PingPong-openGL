@@ -1,128 +1,74 @@
-package com.ms.msamg.seismic.client;
+package com.ms.msamg.imwebapi.config;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
-import java.security.cert.X509Certificate;
-import java.util.Arrays;
-import javax.inject.Named;
-import javax.net.ssl.*;
+import com.ms.msamg.imwebapi.util.ScvSecretsProviderUtil;
+import net.snowflake.client.jdbc.SnowflakeBasicDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
-import okhttp3.OkHttpClient;
-import org.apache.http.HttpHost;
-import org.apache.http.HttpRequest;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.CookieStore;
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.config.AuthSchemes;
-import org.apache.http.client.config.CookieSpecs;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.conn.ClientConnectionManager;
-import org.apache.http.impl.client.BasicCookieStore;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.conn.ssl.TrustStrategy;
-import org.apache.http.protocol.HttpContext;
-import org.springframework.stereotype.Component;
+@Configuration  // Marks this class as a Spring Configuration class
+public class SnowflakeDataSourceConfig {
 
-@Named
-@Component
-public class ApacheHttpClient extends CloseableHttpClient {
+    private static final Logger log = LoggerFactory.getLogger(SnowflakeDataSourceConfig.class);
 
-    private CloseableHttpClient httpClient;
+    // Directly defining Snowflake credentials as variables instead of fetching from properties
+    private final String sfAccount = "devbcs.east_us-2.privatelink.snowflakecomputing.com";
+    private final String sfProxyHost = "webproxy=sf_nonprod=na.ms.com";
+    private final String sfProxyPort = "8080";
+    private final String sfWarehouse = "APP_CORE_IH_XS";
+    private final String sfDatabase = "WEBT00LSDATADB";
+    private final String sfSchema = "public";
+    private final String sfRole = "WEBT00LSDATADB_WRITE_ROLE";
+    private final String sfUsername = "imwebapid";
+    private final String namespace = "im/msamg/imwebapi/dev";
+    private final String passphraseKey = "snowflake_passphrase";
+    private final String privateKey = "snowflake_private_key";
 
-    // Trust all certificates implementation
-    protected TrustManager[] getTrustManagers() {
-        return new TrustManager[]{
-            new X509TrustManager() {
-                @Override
-                public X509Certificate[] getAcceptedIssuers() {
-                    return new X509Certificate[0];
-                }
+    // Constructing the JDBC URL manually
+    private final String sfJdbcConnectionUrl = String.format(
+            "jdbc:snowflake://%s/?useProxy=true&proxyHost=%s&proxyPort=%s",
+            sfAccount, sfProxyHost, sfProxyPort
+    );
 
-                @Override
-                public void checkClientTrusted(X509Certificate[] certs, String authType) {
-                    // Trust all clients
-                }
-
-                @Override
-                public void checkServerTrusted(X509Certificate[] certs, String authType) {
-                    // Trust all servers
-                }
-            }
-        };
+    /**
+     * Creates a NamedParameterJdbcTemplate bean for executing SQL queries on Snowflake.
+     */
+    @Bean(name = "snowflakeJdbcTemplate")
+    @Profile({"dev", "windev", "qa", "QA"})  // Bean will be active only in these environments
+    public NamedParameterJdbcTemplate getSnowflakeJdbcTemplate() {
+        return new NamedParameterJdbcTemplate(snowflakeDataSource());
     }
 
-    public ApacheHttpClient() throws Exception {
-        // Create a trust-all SSL context
-        TrustManager[] trustAllCerts = getTrustManagers();
-        SSLContext sslContext = SSLContext.getInstance("SSL");
-        sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+    /**
+     * Configures and returns a Snowflake JDBC DataSource with credentials fetched securely.
+     */
+    @Bean(name = "snowflakeDataSource")
+    @Profile({"dev", "windev", "qa", "QA"})  // Limits this bean to certain profiles
+    public SnowflakeBasicDataSource snowflakeDataSource() {
+        SnowflakeBasicDataSource dataSource = new SnowflakeBasicDataSource();
+        
+        // Utility class for securely retrieving private key
+        ScvSecretsProviderUtil scvSecretsProviderUtil = new ScvSecretsProviderUtil();
 
-        // Create SSL socket factory
-        SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
-            sslContext,
-            NoopHostnameVerifier.INSTANCE
-        );
+        // Fetch and set private key for Snowflake authentication
+        dataSource.setPrivateKey(scvSecretsProviderUtil.fetchPrivateKey(namespace, passphraseKey, privateKey));
+        
+        // Setting Snowflake connection parameters
+        dataSource.setUrl(sfJdbcConnectionUrl);
+        dataSource.setWarehouse(sfWarehouse);
+        dataSource.setDatabaseName(sfDatabase);
+        dataSource.setSchema(sfSchema);
+        dataSource.setUser(sfUsername);
+        dataSource.setRole(sfRole);
+        dataSource.setSsl(true);  // Enforce SSL for security
 
-        // Configure Proxy if needed
-        HttpHost proxy = new HttpHost("proxy-app.ms.com", 8080);
-
-        // Setup Cookie Store and Credentials Provider
-        CookieStore cookieStore = new BasicCookieStore();
-        CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-
-        // Define request configuration
-        RequestConfig defaultRequestConfig = RequestConfig.custom()
-            .setCookieSpec(CookieSpecs.DEFAULT)
-            .setExpectContinueEnabled(true)
-            .setTargetPreferredAuthSchemes(Arrays.asList(AuthSchemes.NTLM, AuthSchemes.DIGEST))
-            .setProxyPreferredAuthSchemes(Arrays.asList(AuthSchemes.BASIC))
-            .setProxy(proxy)
-            .build();
-
-        // Build HTTP client
-        httpClient = HttpClients.custom()
-            .setDefaultCookieStore(cookieStore)
-            .setDefaultCredentialsProvider(credentialsProvider)
-            .setSSLSocketFactory(sslSocketFactory)
-            .setDefaultRequestConfig(defaultRequestConfig)
-            .setProxy(proxy)
-            .build();
+        return dataSource;
     }
-
-    @Override
-    @SuppressWarnings("deprecation")
-    public org.apache.http.params.HttpParams getParams() {
-        return httpClient.getParams();
-    }
-
-    @Override
-    @SuppressWarnings("deprecation")
-    public ClientConnectionManager getConnectionManager() {
-        return httpClient.getConnectionManager();
-    }
-
-    @Override
-    public void close() throws IOException {
-        httpClient.close();
-    }
-
-    @Override
-    protected CloseableHttpResponse doExecute(HttpHost target, HttpRequest request, HttpContext context)
-            throws IOException, ClientProtocolException {
-        return httpClient.execute(target, request, context);
-    }
-
-    public CloseableHttpClient getHttpClient() {
-        return httpClient;
-    }
-
-    public void setHttpClient(CloseableHttpClient httpClient) {
-        this.httpClient = httpClient;
-    }
+}
+public static void main(String[] args) {
+    SnowflakeDataSourceConfig config = new SnowflakeDataSourceConfig();
+    System.out.println("Snowflake JDBC URL: " + config.snowflakeDataSource().getUrl());
 }
