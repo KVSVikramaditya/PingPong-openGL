@@ -63,3 +63,43 @@ public class TaxDataDAOImpl implements TaxDataDAO {
         return namedParameterJdbcTemplate.queryForList(sql, new MapSqlParameterSource());
     }
 }
+
+
+
+package com.ms.msamg.imwebapi.dao.taxCalculatorData;
+
+import com.ms.msamg.imwebapi.model.taxCalculator.TaxState;
+
+import java.util.List;
+import java.util.Map;
+
+public interface TaxDataDAO {
+
+    /**
+     * Returns the state name (or some related data) for the given code.
+     * @param code the code used to look up a state.
+     * @return the state as a string, or null if not found.
+     */
+    String getState(String code);
+
+    /**
+     * Inserts a new TaxState record.
+     * @param taxState the TaxState object holding data to insert.
+     * @return the number of rows affected.
+     */
+    int createState(TaxState taxState);
+
+    /**
+     * Removes a TaxState record.
+     * @param taxState the TaxState object identifying the record(s) to remove.
+     * @return the number of rows affected.
+     */
+    int removeState(TaxState taxState);
+
+    /**
+     * Example method to retrieve all records from the "family" table.
+     * @return list of rows, each row represented as a map from column name to value.
+     */
+    List<Map<String, Object>> getAllFamilyRecords();
+}
+
