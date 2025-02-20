@@ -1,105 +1,38 @@
-package com.ms.msamg.imwebapi.dao.taxCalculatorData;
+package com.msim.seismic_datafeed;
 
-import com.ms.msamg.imwebapi.config.SnowflakeDataSourceConfig;
-import com.ms.msamg.imwebapi.model.taxCalculator.TaxState;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import com.msim.seismic_datafeed.jobs.salescoverage.model.V_TERRITORY_COVERAGE_dao;
+import com.msim.seismic_datafeed.config.DataFeedMainConfiguration;
+import lombok.extern.slf4j.Slf4j;
+import msjava.base.application.SpringMain;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.ApplicationContext;
+import org.springframework.beans.factory.annotation.Autowired;
 
-import java.util.List;
-import java.util.Map;
+@Slf4j
+@SpringBootApplication
+public class SeismicDataFeedMain {
 
-@Component
-public class TaxDataDAOImpl implements TaxDataDAO {
+    @Autowired
+    private V_TERRITORY_COVERAGE_dao territoryCoverageDao;
 
-    private static final Logger log = LoggerFactory.getLogger(TaxDataDAOImpl.class);
+    public static void main(String[] args) {
+        log.info("Starting SeismicDataFeed MAIN Application");
 
-    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+        // 1) Create and run the Spring context using your custom SpringMain
+        SpringMain springMain = new SpringMain();
+        // NOTE: springMain.run(...) should return an ApplicationContext
+        ApplicationContext context = springMain.run("-autoconf", DataFeedMainConfiguration.class.getName());
 
-    public TaxDataDAOImpl(@Qualifier(SnowflakeDataSourceConfig.SNOWFLAKE_JDBC_TEMPLATE)
-                          NamedParameterJdbcTemplate snowflakeJdbcTemplate) {
-        this.namedParameterJdbcTemplate = snowflakeJdbcTemplate;
-    }
+        log.info("Started SeismicDataFeed MAIN Application");
 
-    @Override
-    public String getState(String code) {
-        // Example usage, though not required to run a SELECT * query
-        final String sql = "SELECT state FROM SomeTable WHERE code = :code";
-        MapSqlParameterSource params = new MapSqlParameterSource();
-        params.addValue("code", code);
+        // 2) Retrieve *this* main class from the Spring context, so its @Autowired fields are set
+        SeismicDataFeedMain mainBean = context.getBean(SeismicDataFeedMain.class);
 
-        // This is just an example: implement your actual logic
-        List<String> results = namedParameterJdbcTemplate.queryForList(sql, params, String.class);
-        return results.isEmpty() ? null : results.get(0);
-    }
+        // 3) Now you can safely call the DAO method
+        var records = mainBean.territoryCoverageDao.getAllFamilyRecords();
+        log.info("Fetched {} records from Snowflake.", records.size());
 
-    @Override
-    public int createState(TaxState taxState) {
-        // Example of an INSERT
-        final String sql = "INSERT INTO SomeTable (someColumn) VALUES (:someValue)";
-        BeanPropertySqlParameterSource source = new BeanPropertySqlParameterSource(taxState);
-        return namedParameterJdbcTemplate.update(sql, source);
-    }
-
-    @Override
-    public int removeState(TaxState taxState) {
-        // Example of a DELETE
-        final String sql = "DELETE FROM SomeTable WHERE someColumn = :someValue";
-        BeanPropertySqlParameterSource source = new BeanPropertySqlParameterSource(taxState);
-        return namedParameterJdbcTemplate.update(sql, source);
-    }
-
-    // Example method to execute "SELECT * FROM family"
-    // This returns a List of Map<String, Object> so you can iterate over each row.
-    @Transactional(readOnly = true)
-    public List<Map<String, Object>> getAllFamilyRecords() {
-        log.info("Executing query: SELECT * FROM family");
-        final String sql = "SELECT * FROM family";
-        return namedParameterJdbcTemplate.queryForList(sql, new MapSqlParameterSource());
+        // Optionally print them
+        records.forEach(record -> log.info("Row: {}", record));
     }
 }
-
-
-
-package com.ms.msamg.imwebapi.dao.taxCalculatorData;
-
-import com.ms.msamg.imwebapi.model.taxCalculator.TaxState;
-
-import java.util.List;
-import java.util.Map;
-
-public interface TaxDataDAO {
-
-    /**
-     * Returns the state name (or some related data) for the given code.
-     * @param code the code used to look up a state.
-     * @return the state as a string, or null if not found.
-     */
-    String getState(String code);
-
-    /**
-     * Inserts a new TaxState record.
-     * @param taxState the TaxState object holding data to insert.
-     * @return the number of rows affected.
-     */
-    int createState(TaxState taxState);
-
-    /**
-     * Removes a TaxState record.
-     * @param taxState the TaxState object identifying the record(s) to remove.
-     * @return the number of rows affected.
-     */
-    int removeState(TaxState taxState);
-
-    /**
-     * Example method to retrieve all records from the "family" table.
-     * @return list of rows, each row represented as a map from column name to value.
-     */
-    List<Map<String, Object>> getAllFamilyRecords();
-}
-
