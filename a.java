@@ -1,74 +1,83 @@
-package com.ms.msamg.imwebapi.config;
+package com.msim.seismic_datafeed.jobs.salescoverage;
 
-import com.ms.msamg.imwebapi.util.ScvSecretsProviderUtil;
-import net.snowflake.client.jdbc.SnowflakeBasicDataSource;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.Base64;
+import javax.crypto.EncryptedPrivateKeyInfo;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import net.snowflake.client.jdbc.SnowflakeBasicDataSource;
+import org.springframework.stereotype.Component;
 
-@Configuration  // Marks this class as a Spring Configuration class
+@Component
 public class SnowflakeDataSourceConfig {
-
+    
     private static final Logger log = LoggerFactory.getLogger(SnowflakeDataSourceConfig.class);
+    private static final String ENCR_PRIVATE_KEY_PREFIX = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
+    private static final String ENCR_PRIVATE_KEY_SUFFIX = "-----END ENCRYPTED PRIVATE KEY-----";
+    private static final String CERT_ALGO = "RSA";
 
-    // Directly defining Snowflake credentials as variables instead of fetching from properties
-    private final String sfAccount = "devbcs.east_us-2.privatelink.snowflakecomputing.com";
-    private final String sfProxyHost = "webproxy=sf_nonprod=na.ms.com";
-    private final String sfProxyPort = "8080";
-    private final String sfWarehouse = "APP_CORE_IH_XS";
-    private final String sfDatabase = "WEBT00LSDATADB";
-    private final String sfSchema = "public";
-    private final String sfRole = "WEBT00LSDATADB_WRITE_ROLE";
-    private final String sfUsername = "imwebapid";
-    private final String namespace = "im/msamg/imwebapi/dev";
-    private final String passphraseKey = "snowflake_passphrase";
+    private final String sfJdbcConnectionUrl = "jdbc:snowflake://devbcs.east-us-2.privatelink-snowflakecomputing.com/?useProxy=true&proxyHost=webproxy-sf-nonprod-na.ms.com&proxyPort=8080";
+    private final String sfDatabaseWarehouse = "IM_CDP_DB";
+    private final String sfDatabaseServer = "WEBTOOLSDATADB";
+    private final String sfDatabaseSchema = "public";
+    private final String sfRole = "MKT_CDP_READ";
+    private final String sfUsername = "imseismafg";
+    private final String namespace = "im/marketing/MSIMSeismic/dev/seismic";
+    private final String passphraseKey = "snowflake_dev_password";
     private final String privateKey = "snowflake_private_key";
 
-    // Constructing the JDBC URL manually
-    private final String sfJdbcConnectionUrl = String.format(
-            "jdbc:snowflake://%s/?useProxy=true&proxyHost=%s&proxyPort=%s",
-            sfAccount, sfProxyHost, sfProxyPort
-    );
-
-    /**
-     * Creates a NamedParameterJdbcTemplate bean for executing SQL queries on Snowflake.
-     */
     @Bean(name = "snowflakeJdbcTemplate")
-    @Profile({"dev", "windev", "qa", "QA"})  // Bean will be active only in these environments
+    @Profile({"dev", "windev", "qa", "QA"})
     public NamedParameterJdbcTemplate getSnowflakeJdbcTemplate() {
         return new NamedParameterJdbcTemplate(snowflakeDataSource());
     }
 
-    /**
-     * Configures and returns a Snowflake JDBC DataSource with credentials fetched securely.
-     */
     @Bean(name = "snowflakeDataSource")
-    @Profile({"dev", "windev", "qa", "QA"})  // Limits this bean to certain profiles
+    @Profile({"dev", "windev", "qa", "QA"})
     public SnowflakeBasicDataSource snowflakeDataSource() {
         SnowflakeBasicDataSource dataSource = new SnowflakeBasicDataSource();
-        
-        // Utility class for securely retrieving private key
         ScvSecretsProviderUtil scvSecretsProviderUtil = new ScvSecretsProviderUtil();
-
-        // Fetch and set private key for Snowflake authentication
         dataSource.setPrivateKey(scvSecretsProviderUtil.fetchPrivateKey(namespace, passphraseKey, privateKey));
-        
-        // Setting Snowflake connection parameters
         dataSource.setUrl(sfJdbcConnectionUrl);
-        dataSource.setWarehouse(sfWarehouse);
-        dataSource.setDatabaseName(sfDatabase);
-        dataSource.setSchema(sfSchema);
+        dataSource.setWarehouse(sfDatabaseWarehouse);
+        dataSource.setDatabaseName(sfDatabaseServer);
+        dataSource.setSchema(sfDatabaseSchema);
         dataSource.setUser(sfUsername);
         dataSource.setRole(sfRole);
-        dataSource.setSsl(true);  // Enforce SSL for security
-
+        dataSource.setSsl(true);
         return dataSource;
     }
-}
-public static void main(String[] args) {
-    SnowflakeDataSourceConfig config = new SnowflakeDataSourceConfig();
-    System.out.println("Snowflake JDBC URL: " + config.snowflakeDataSource().getUrl());
+
+    private static class ScvSecretsProviderUtil {
+        public PrivateKey fetchPrivateKey(String namespace, String passphraseKey, String privateKey) {
+            try {
+                SecureCredentialsVault scv = new SecureCredentialsVault();
+                String passphrase = scv.tellKey(namespace, passphraseKey).getDataAsString();
+                passphrase = passphrase.replace(ENCR_PRIVATE_KEY_PREFIX, StringUtils.EMPTY)
+                                      .replace(ENCR_PRIVATE_KEY_SUFFIX, StringUtils.EMPTY);
+                
+                String encrypted = scv.tellKey(namespace, privateKey).getDataAsString();
+                encrypted = encrypted.replace(ENCR_PRIVATE_KEY_PREFIX, StringUtils.EMPTY)
+                                     .replace(ENCR_PRIVATE_KEY_SUFFIX, StringUtils.EMPTY);
+                
+                EncryptedPrivateKeyInfo pkInfo = new EncryptedPrivateKeyInfo(Base64.getMimeDecoder().decode(encrypted));
+                PBEKeySpec keySpec = new PBEKeySpec(passphrase.toCharArray());
+                SecretKeyFactory pbeKeyFactory = SecretKeyFactory.getInstance(pkInfo.getAlgName());
+                PKCS8EncodedKeySpec encodedKeySpec = pkInfo.getKeySpec(pbeKeyFactory.generateSecret(keySpec));
+                KeyFactory keyFactory = KeyFactory.getInstance(CERT_ALGO);
+                return keyFactory.generatePrivate(encodedKeySpec);
+            } catch (Exception e) {
+                log.error("Error while retrieving the secrets from SCV", e);
+                return null;
+            }
+        }
+    }
 }
