@@ -40,9 +40,16 @@ public class SalescoverageDataProcessor implements ItemProcessor<SalescoverageIn
     public SalescoverageOutput process(SalescoverageInput item) throws Exception {
         log.info("Processing sales coverage data: {}", item);
         SalescoverageOutput output = new SalescoverageOutput();
-        output.setField1(item.getField1());
-        output.setField2(item.getField2());
-        output.setField3(item.getField3());
+        output.setSfTeamId(item.getSfTeamId());
+        output.setTeamCode(item.getTeamCode());
+        output.setTeamName(item.getTeamName());
+        output.setSfTerritoryId(item.getSfTerritoryId());
+        output.setTerritoryCode(item.getTerritoryCode());
+        output.setTerritoryName(item.getTerritoryName());
+        output.setInternalSalesPersonMsid(item.getInternalSalesPersonMsid());
+        output.setInternalSalesPersonFullName(item.getInternalSalesPersonFullName());
+        output.setExternalSalesPersonMsid(item.getExternalSalesPersonMsid());
+        output.setExternalSalesPersonFullName(item.getExternalSalesPersonFullName());
         return output;
     }
 }
@@ -79,13 +86,20 @@ public class SalescoverageDaoImpl implements SalescoverageDao {
     @Override
     public List<SalescoverageInput> getSalesCoverageRecords() {
         log.info("Executing query to fetch sales coverage data from Snowflake");
-        String sql = "SELECT field1, field2, field3 FROM sales_coverage_table";
+        String sql = "SELECT SF_TEAM_ID, TEAM_CODE, TEAM_NAME, SF_TERRITORY_ID, TERRITORY_CODE, TERRITORY_NAME, INTERNAL_SALES_PERSON_MSID, INTERNAL_SALES_PERSON_FULL_NAME, EXTERNAL_SALES_PERSON_MSID, EXTERNAL_SALES_PERSON_FULL_NAME FROM sales_coverage_table";
         List<Map<String, Object>> rows = namedParameterJdbcTemplate.queryForList(sql, Map.of());
         return rows.stream().map(row -> {
             SalescoverageInput input = new SalescoverageInput();
-            input.setField1((String) row.get("field1"));
-            input.setField2((String) row.get("field2"));
-            input.setField3((String) row.get("field3"));
+            input.setSfTeamId((String) row.get("SF_TEAM_ID"));
+            input.setTeamCode((String) row.get("TEAM_CODE"));
+            input.setTeamName((String) row.get("TEAM_NAME"));
+            input.setSfTerritoryId((String) row.get("SF_TERRITORY_ID"));
+            input.setTerritoryCode((String) row.get("TERRITORY_CODE"));
+            input.setTerritoryName((String) row.get("TERRITORY_NAME"));
+            input.setInternalSalesPersonMsid((String) row.get("INTERNAL_SALES_PERSON_MSID"));
+            input.setInternalSalesPersonFullName((String) row.get("INTERNAL_SALES_PERSON_FULL_NAME"));
+            input.setExternalSalesPersonMsid((String) row.get("EXTERNAL_SALES_PERSON_MSID"));
+            input.setExternalSalesPersonFullName((String) row.get("EXTERNAL_SALES_PERSON_FULL_NAME"));
             return input;
         }).toList();
     }
