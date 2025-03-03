@@ -1,83 +1,124 @@
 package com.msim.seismic_datafeed.jobs.salescoverage;
 
-import java.security.KeyFactory;
-import java.security.PrivateKey;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.util.Base64;
-import javax.crypto.EncryptedPrivateKeyInfo;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
-import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.msim.seismic_datafeed.utils.CSVFileUtils;
+import com.msim.seismic_datafeed.utils.FileUtils;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.*;
+import org.springframework.batch.core.configuration.annotation.*;
+import org.springframework.batch.core.job.flow.JobExecutionDecider;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.core.step.tasklet.Tasklet;
+import org.springframework.batch.item.file.FlatFileItemWriter;
+import org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor;
+import org.springframework.batch.item.file.transform.DelimitedLineAggregator;
+import org.springframework.batch.item.support.CompositeItemProcessor;
+import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.beans.factory.annotation.*;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Profile;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import net.snowflake.client.jdbc.SnowflakeBasicDataSource;
-import org.springframework.stereotype.Component;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
-@Component
-public class SnowflakeDataSourceConfig {
-    
-    private static final Logger log = LoggerFactory.getLogger(SnowflakeDataSourceConfig.class);
-    private static final String ENCR_PRIVATE_KEY_PREFIX = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
-    private static final String ENCR_PRIVATE_KEY_SUFFIX = "-----END ENCRYPTED PRIVATE KEY-----";
-    private static final String CERT_ALGO = "RSA";
+@Slf4j
+@Configuration
+public class SalescoverageBatchConfiguration {
 
-    private final String sfJdbcConnectionUrl = "jdbc:snowflake://devbcs.east-us-2.privatelink-snowflakecomputing.com/?useProxy=true&proxyHost=webproxy-sf-nonprod-na.ms.com&proxyPort=8080";
-    private final String sfDatabaseWarehouse = "IM_CDP_DB";
-    private final String sfDatabaseServer = "WEBTOOLSDATADB";
-    private final String sfDatabaseSchema = "public";
-    private final String sfRole = "MKT_CDP_READ";
-    private final String sfUsername = "imseismafg";
-    private final String namespace = "im/marketing/MSIMSeismic/dev/seismic";
-    private final String passphraseKey = "snowflake_dev_password";
-    private final String privateKey = "snowflake_private_key";
+    @Autowired
+    private JobBuilderFactory jobBuilderFactory;
 
-    @Bean(name = "snowflakeJdbcTemplate")
-    @Profile({"dev", "windev", "qa", "QA"})
-    public NamedParameterJdbcTemplate getSnowflakeJdbcTemplate() {
-        return new NamedParameterJdbcTemplate(snowflakeDataSource());
+    @Autowired
+    private StepBuilderFactory stepBuilderFactory;
+
+    @Autowired
+    private JobExecutionDecider cometJobDecider;
+
+    @Autowired
+    private CometJobTrigger cometJobTrigger;
+
+    @Autowired
+    private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+
+    @Value("${spring.batch.chunk.size}")
+    private int chunkSize;
+
+    @Value("${seismic.output.file.directory}")
+    private String outputFileDirectory;
+
+    @Bean(name = "LoadSalescoverageJob")
+    public Job loadSalescoverageJob(
+            @Qualifier("retrieveSalescoverage") Step retrieveSalescoverage,
+            @Qualifier("salescoverageCometJobTriggerStep") Step salescoverageCometJobTriggerStep,
+            StatisticsLoggerJobExecutionListener statisticsLoggerJobExecutionListener) {
+        return jobBuilderFactory.get("LoadSalescoverageJob")
+                .listener(statisticsLoggerJobExecutionListener)
+                .incrementer(new RunIdIncrementer())
+                .preventRestart()
+                .flow(retrieveSalescoverage)
+                .next(cometJobDecider)
+                .on(CometJobDecider.CONTINUE).to(salescoverageCometJobTriggerStep)
+                .from(cometJobDecider)
+                .on(CometJobDecider.BREAK).end()
+                .end()
+                .build();
     }
 
-    @Bean(name = "snowflakeDataSource")
-    @Profile({"dev", "windev", "qa", "QA"})
-    public SnowflakeBasicDataSource snowflakeDataSource() {
-        SnowflakeBasicDataSource dataSource = new SnowflakeBasicDataSource();
-        ScvSecretsProviderUtil scvSecretsProviderUtil = new ScvSecretsProviderUtil();
-        dataSource.setPrivateKey(scvSecretsProviderUtil.fetchPrivateKey(namespace, passphraseKey, privateKey));
-        dataSource.setUrl(sfJdbcConnectionUrl);
-        dataSource.setWarehouse(sfDatabaseWarehouse);
-        dataSource.setDatabaseName(sfDatabaseServer);
-        dataSource.setSchema(sfDatabaseSchema);
-        dataSource.setUser(sfUsername);
-        dataSource.setRole(sfRole);
-        dataSource.setSsl(true);
-        return dataSource;
+    @Bean(name = "retrieveSalescoverage")
+    public Step retrieveSalescoverage(
+            @Qualifier("salescoverageDataReader") SalescoverageDataReader salescoverageDataReader,
+            @Qualifier("salescoverageItemProcessor") CompositeItemProcessor<SalescoverageInput, SalescoverageOutput> salescoverageItemProcessor,
+            @Qualifier("salescoverageFileItemWriter") FlatFileItemWriter<SalescoverageOutput> salescoverageFileItemWriter) {
+        return stepBuilderFactory.get("retrieveSalescoverage")
+                .<SalescoverageInput, SalescoverageOutput>chunk(chunkSize)
+                .reader(salescoverageDataReader)
+                .processor(salescoverageItemProcessor)
+                .writer(salescoverageFileItemWriter)
+                .build();
     }
 
-    private static class ScvSecretsProviderUtil {
-        public PrivateKey fetchPrivateKey(String namespace, String passphraseKey, String privateKey) {
-            try {
-                SecureCredentialsVault scv = new SecureCredentialsVault();
-                String passphrase = scv.tellKey(namespace, passphraseKey).getDataAsString();
-                passphrase = passphrase.replace(ENCR_PRIVATE_KEY_PREFIX, StringUtils.EMPTY)
-                                      .replace(ENCR_PRIVATE_KEY_SUFFIX, StringUtils.EMPTY);
-                
-                String encrypted = scv.tellKey(namespace, privateKey).getDataAsString();
-                encrypted = encrypted.replace(ENCR_PRIVATE_KEY_PREFIX, StringUtils.EMPTY)
-                                     .replace(ENCR_PRIVATE_KEY_SUFFIX, StringUtils.EMPTY);
-                
-                EncryptedPrivateKeyInfo pkInfo = new EncryptedPrivateKeyInfo(Base64.getMimeDecoder().decode(encrypted));
-                PBEKeySpec keySpec = new PBEKeySpec(passphrase.toCharArray());
-                SecretKeyFactory pbeKeyFactory = SecretKeyFactory.getInstance(pkInfo.getAlgName());
-                PKCS8EncodedKeySpec encodedKeySpec = pkInfo.getKeySpec(pbeKeyFactory.generateSecret(keySpec));
-                KeyFactory keyFactory = KeyFactory.getInstance(CERT_ALGO);
-                return keyFactory.generatePrivate(encodedKeySpec);
-            } catch (Exception e) {
-                log.error("Error while retrieving the secrets from SCV", e);
-                return null;
-            }
-        }
+    @Bean(name = "salescoverageDataReader")
+    @StepScope
+    public SalescoverageDataReader salescoverageDataReader(SalescoverageDataProvider salescoverageDataProvider) {
+        return new SalescoverageDataReader(salescoverageDataProvider);
     }
+
+    @Bean(name = "salescoverageDataProvider")
+    public SalescoverageDataProvider salescoverageDataProvider() {
+        return new SalescoverageDataProvider(namedParameterJdbcTemplate);
+    }
+
+    @Bean(name = "salescoverageItemProcessor")
+    @StepScope
+    public CompositeItemProcessor<SalescoverageInput, SalescoverageOutput> salescoverageItemProcessor(
+            @Autowired SalescoverageDataProcessor salescoverageDataProcessor) throws Exception {
+        List<Object> delegates = new ArrayList<>(1);
+        delegates.add(salescoverageDataProcessor);
+        CompositeItemProcessor<SalescoverageInput, SalescoverageOutput> compositeItemProcessor = new CompositeItemProcessor<>();
+        compositeItemProcessor.setDelegates(delegates);
+        compositeItemProcessor.afterPropertiesSet();
+        return compositeItemProcessor;
+    }
+
+    @Bean(name = "salescoverageFileItemWriter")
+    @StepScope
+    public FlatFileItemWriter<SalescoverageOutput> salescoverageFileItemWriter(
+            @Value("#{jobParameters['asOfDate']}") String asOfDate) {
+        String fileName = "SalesCoverage_" + asOfDate + ".csv";
+        String fullFilePath = outputFileDirectory + fileName;
+        FileSystemResource fileResource = new FileSystemResource(fullFilePath);
+        BeanWrapperFieldExtractor<SalescoverageOutput> fieldExtractor = new BeanWrapperFieldExtractor<>();
+        fieldExtractor.setNames(new String[]{"field1", "field2", "field3"}); // Modify as needed
+        DelimitedLineAggregator<SalescoverageOutput> lineAggregator = new DelimitedLineAggregator<>();
+        lineAggregator.setDelimiter(",");
+        lineAggregator.setFieldExtractor(fieldExtractor);
+        FlatFileItemWriter<SalescoverageOutput> fileItemWriter = new FlatFileItemWriter<>();
+        fileItemWriter.setResource(fileResource);
+        fileItemWriter.setLineAggregator(lineAggregator);
+        fileItemWriter.setShouldDeleteIfEmpty(true);
+        fileItemWriter.setShouldDeleteIfExists(true);
+        return fileItemWriter;
+    }
+
 }
