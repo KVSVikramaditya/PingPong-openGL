@@ -10,9 +10,9 @@ import java.util.Map;
 
 @Slf4j
 @Component
-public class SalescoverageDataReader implements ItemReader<SalescoverageInput> {
+public class SalescoverageDataReader implements ItemReader<SalescoverageData> {
     private final SalescoverageDataProvider salescoverageDataProvider;
-    private List<SalescoverageInput> data;
+    private List<SalescoverageData> data;
     private int nextIndex;
 
     public SalescoverageDataReader(SalescoverageDataProvider salescoverageDataProvider) {
@@ -21,7 +21,7 @@ public class SalescoverageDataReader implements ItemReader<SalescoverageInput> {
     }
 
     @Override
-    public SalescoverageInput read() throws Exception {
+    public SalescoverageData read() throws Exception {
         if (data == null) {
             data = salescoverageDataProvider.fetchSalescoverageData();
         }
@@ -35,11 +35,11 @@ public class SalescoverageDataReader implements ItemReader<SalescoverageInput> {
 
 @Slf4j
 @Component
-public class SalescoverageDataProcessor implements ItemProcessor<SalescoverageInput, SalescoverageOutput> {
+public class SalescoverageDataProcessor implements ItemProcessor<SalescoverageData, SalescoverageDataItem> {
     @Override
-    public SalescoverageOutput process(SalescoverageInput item) throws Exception {
+    public SalescoverageDataItem process(SalescoverageData item) throws Exception {
         log.info("Processing sales coverage data: {}", item);
-        SalescoverageOutput output = new SalescoverageOutput();
+        SalescoverageDataItem output = new SalescoverageDataItem();
         output.setSfTeamId(item.getSfTeamId());
         output.setTeamCode(item.getTeamCode());
         output.setTeamName(item.getTeamName());
@@ -63,7 +63,7 @@ public class SalescoverageDataProvider {
         this.salescoverageDao = salescoverageDao;
     }
 
-    public List<SalescoverageInput> fetchSalescoverageData() {
+    public List<SalescoverageData> fetchSalescoverageData() {
         log.info("Fetching sales coverage data from DAO");
         return salescoverageDao.getSalesCoverageRecords();
     }
@@ -71,7 +71,7 @@ public class SalescoverageDataProvider {
 
 @Component
 public interface SalescoverageDao {
-    List<SalescoverageInput> getSalesCoverageRecords();
+    List<SalescoverageData> getSalesCoverageRecords();
 }
 
 @Slf4j
@@ -84,23 +84,23 @@ public class SalescoverageDaoImpl implements SalescoverageDao {
     }
 
     @Override
-    public List<SalescoverageInput> getSalesCoverageRecords() {
+    public List<SalescoverageData> getSalesCoverageRecords() {
         log.info("Executing query to fetch sales coverage data from Snowflake");
         String sql = "SELECT SF_TEAM_ID, TEAM_CODE, TEAM_NAME, SF_TERRITORY_ID, TERRITORY_CODE, TERRITORY_NAME, INTERNAL_SALES_PERSON_MSID, INTERNAL_SALES_PERSON_FULL_NAME, EXTERNAL_SALES_PERSON_MSID, EXTERNAL_SALES_PERSON_FULL_NAME FROM sales_coverage_table";
         List<Map<String, Object>> rows = namedParameterJdbcTemplate.queryForList(sql, Map.of());
         return rows.stream().map(row -> {
-            SalescoverageInput input = new SalescoverageInput();
-            input.setSfTeamId((String) row.get("SF_TEAM_ID"));
-            input.setTeamCode((String) row.get("TEAM_CODE"));
-            input.setTeamName((String) row.get("TEAM_NAME"));
-            input.setSfTerritoryId((String) row.get("SF_TERRITORY_ID"));
-            input.setTerritoryCode((String) row.get("TERRITORY_CODE"));
-            input.setTerritoryName((String) row.get("TERRITORY_NAME"));
-            input.setInternalSalesPersonMsid((String) row.get("INTERNAL_SALES_PERSON_MSID"));
-            input.setInternalSalesPersonFullName((String) row.get("INTERNAL_SALES_PERSON_FULL_NAME"));
-            input.setExternalSalesPersonMsid((String) row.get("EXTERNAL_SALES_PERSON_MSID"));
-            input.setExternalSalesPersonFullName((String) row.get("EXTERNAL_SALES_PERSON_FULL_NAME"));
-            return input;
+            SalescoverageData data = new SalescoverageData();
+            data.setSfTeamId((String) row.get("SF_TEAM_ID"));
+            data.setTeamCode((String) row.get("TEAM_CODE"));
+            data.setTeamName((String) row.get("TEAM_NAME"));
+            data.setSfTerritoryId((String) row.get("SF_TERRITORY_ID"));
+            data.setTerritoryCode((String) row.get("TERRITORY_CODE"));
+            data.setTerritoryName((String) row.get("TERRITORY_NAME"));
+            data.setInternalSalesPersonMsid((String) row.get("INTERNAL_SALES_PERSON_MSID"));
+            data.setInternalSalesPersonFullName((String) row.get("INTERNAL_SALES_PERSON_FULL_NAME"));
+            data.setExternalSalesPersonMsid((String) row.get("EXTERNAL_SALES_PERSON_MSID"));
+            data.setExternalSalesPersonFullName((String) row.get("EXTERNAL_SALES_PERSON_FULL_NAME"));
+            return data;
         }).toList();
     }
 }
