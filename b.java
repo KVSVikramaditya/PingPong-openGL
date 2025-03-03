@@ -50,14 +50,35 @@ public class SalescoverageDataProcessor implements ItemProcessor<SalescoverageIn
 @Slf4j
 @Component
 public class SalescoverageDataProvider {
-    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final SalescoverageDao salescoverageDao;
 
-    public SalescoverageDataProvider(NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
-        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
+    public SalescoverageDataProvider(SalescoverageDao salescoverageDao) {
+        this.salescoverageDao = salescoverageDao;
     }
 
     public List<SalescoverageInput> fetchSalescoverageData() {
-        log.info("Fetching sales coverage data from Snowflake");
+        log.info("Fetching sales coverage data from DAO");
+        return salescoverageDao.getSalesCoverageRecords();
+    }
+}
+
+@Component
+public interface SalescoverageDao {
+    List<SalescoverageInput> getSalesCoverageRecords();
+}
+
+@Slf4j
+@Component
+public class SalescoverageDaoImpl implements SalescoverageDao {
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+
+    public SalescoverageDaoImpl(NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
+    }
+
+    @Override
+    public List<SalescoverageInput> getSalesCoverageRecords() {
+        log.info("Executing query to fetch sales coverage data from Snowflake");
         String sql = "SELECT field1, field2, field3 FROM sales_coverage_table";
         List<Map<String, Object>> rows = namedParameterJdbcTemplate.queryForList(sql, Map.of());
         return rows.stream().map(row -> {
