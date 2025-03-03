@@ -1,5 +1,6 @@
 package com.msim.seismic_datafeed.jobs.salescoverage;
 
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
@@ -7,6 +8,34 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Map;
+
+@Data
+public class SalescoverageData {
+    private String sfTeamId;
+    private String teamCode;
+    private String teamName;
+    private String sfTerritoryId;
+    private String territoryCode;
+    private String territoryName;
+    private String internalSalesPersonMsid;
+    private String internalSalesPersonFullName;
+    private String externalSalesPersonMsid;
+    private String externalSalesPersonFullName;
+}
+
+@Data
+public class SalescoverageDataItem {
+    private String sfTeamId;
+    private String teamCode;
+    private String teamName;
+    private String sfTerritoryId;
+    private String territoryCode;
+    private String territoryName;
+    private String internalSalesPersonMsid;
+    private String internalSalesPersonFullName;
+    private String externalSalesPersonMsid;
+    private String externalSalesPersonFullName;
+}
 
 @Slf4j
 @Component
