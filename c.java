@@ -1,50 +1,31 @@
-@Bean(name = "retrieveSalescoverage")
-public Step retrieveSalescoverage(
-        @Qualifier("salescoverageDataReader") SalescoverageDataReader salescoverageDataReader,
-        @Qualifier("salescoverageItemProcessor") SalescoverageDataProcessor salescoverageDataProcessor,
-        @Qualifier("salescoverageFileItemWriter") FlatFileItemWriter<SalescoverageDataItem> fileItemWriter,
-        @Value("${spring.batch.chunk.size}") int chunkSize
-) {
-    return stepBuilderFactory.get("retrieveSalescoverage")
-            .<SalescoverageData, SalescoverageDataItem>chunk(chunkSize)
-            .reader(salescoverageDataReader)
-            .processor(salescoverageDataProcessor)
-            .writer(fileItemWriter)
-            .build();
-}
+package com.msim.seismic_datafeed.jobs.salescoverage;
 
-
-
-
-@Bean(name = "salescoverageDataReader")
-@StepScope
-public SalescoverageDataReader salescoverageDataReader(SalescoverageDataProvider dataProvider) {
-    return new SalescoverageDataReader(dataProvider);
-}
-
-
-
-
-@Bean(name = "salescoverageDataProvider")
-public SalescoverageDataProvider salescoverageDataProvider(
-    @Qualifier("snowflakeJdbcTemplate") NamedParameterJdbcTemplate namedParameterJdbcTemplate
-) {
-    // Here, the Provider internally creates a DAO
-    return new SalescoverageDataProvider(namedParameterJdbcTemplate);
-}
-
+import com.msim.seismic_datafeed.jobs.salescoverage.model.SalescoverageData;
+import com.msim.seismic_datafeed.jobs.salescoverage.model.SalescoverageDataItem;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.item.ItemProcessor;
+import org.springframework.stereotype.Component;
 
 @Slf4j
-public class SalescoverageDataProvider {
-    private final SalescoverageDaoImpl dao;
+@Component
+public class SalescoverageDataProcessor implements ItemProcessor<SalescoverageData, SalescoverageDataItem> {
 
-    public SalescoverageDataProvider(NamedParameterJdbcTemplate jdbcTemplate) {
-        // Constructing DAO internally
-        this.dao = new SalescoverageDaoImpl(jdbcTemplate);
-    }
+    @Override
+    public SalescoverageDataItem process(SalescoverageData item) throws Exception {
+        log.info("Processing sales coverage data item: {}", item);
 
-    public List<SalescoverageData> fetchSalescoverageData() {
-        log.info("Fetching sales coverage data from DAO (internally created).");
-        return dao.getSalesCoverageRecords();
+        SalescoverageDataItem output = new SalescoverageDataItem();
+        output.setSfTeamId(item.getSfTeamId());
+        output.setTeamCode(item.getTeamCode());
+        output.setTeamName(item.getTeamName());
+        output.setSfTerritoryId(item.getSfTerritoryId());
+        output.setTerritoryCode(item.getTerritoryCode());
+        output.setTerritoryName(item.getTerritoryName());
+        output.setInternalSalesPersonMsid(item.getInternalSalesPersonMsid());
+        output.setInternalSalesPersonFullName(item.getInternalSalesPersonFullName());
+        output.setExternalSalesPersonMsid(item.getExternalSalesPersonMsid());
+        output.setExternalSalesPersonFullName(item.getExternalSalesPersonFullName());
+
+        return output;
     }
 }
