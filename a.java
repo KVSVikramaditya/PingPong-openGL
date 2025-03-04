@@ -45,3 +45,38 @@ public class SalescoverageDaoImpl {
         }).collect(Collectors.toList());
     }
 }
+
+
+
+package com.msim.seismic_datafeed.jobs.salescoverage;
+
+import com.msim.seismic_datafeed.dao.SalescoverageDaoImpl;
+import com.msim.seismic_datafeed.jobs.salescoverage.model.SalescoverageData;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Slf4j
+@Service
+public class SalescoverageDataProvider {
+
+    private final SalescoverageDaoImpl dao;
+
+    @Autowired
+    public SalescoverageDataProvider(NamedParameterJdbcTemplate jdbcTemplate) {
+        // Internally create the DAO
+        this.dao = new SalescoverageDaoImpl(jdbcTemplate);
+    }
+
+    /**
+     * Fetches multiple SalescoverageData records from Snowflake.
+     */
+    public List<SalescoverageData> fetchSalescoverageData() {
+        log.info("Fetching sales coverage data from DAO (internally created).");
+        return dao.getSalesCoverageRecords();
+    }
+}
+
