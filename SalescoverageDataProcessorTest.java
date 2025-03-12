@@ -6,7 +6,7 @@ import org.testng.annotations.Test;
 
 import java.util.List;
 
-import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.*;
 
 public class SalescoverageDataProcessorTest {
 
@@ -14,26 +14,26 @@ public class SalescoverageDataProcessorTest {
 
     @Test
     public void testProcess() throws Exception {
-        SalescoverageData data = new SalescoverageData();
-        data.setSfTeamId("team1");
-        data.setTeamCode("code123");
-        data.setTeamName("Test Team");
-        data.setSfTerritoryId("territory1");
-        data.setTerritoryCode("TER123");
-        data.setTerritoryName("US");
-        data.setInternalSalesPersonMsid("INT001");
-        data.setInternalSalesPersonFullName("John Internal");
-        data.setExternalSalesPersonMsid("EXT002");
-        data.setExternalSalesPersonFullName("Jane External");
+        SalescoverageData input = new SalescoverageData();
+        input.setSfTeamId("ST123");
+        input.setTeamCode("TC456");
+        input.setTeamName("Team A");
+        input.setSfTerritoryId("Terr01");
+        input.setTerritoryCode("TCode");
+        input.setTerritoryName("Territory A");
+        input.setInternalSalesPersonMsid("MSID111");
+        input.setInternalSalesPersonFullName("John Doe");
+        input.setExternalSalesPersonMsid("EXT123");
+        input.setExternalSalesPersonFullName("Jane Doe");
 
-        List<SalescoverageDataItem> result = processor.process(data);
+        List<SalescoverageDataItem> result = processor.process(input);
+
         assertEquals(result.size(), 1);
-        SalescoverageDataItem item = result.get(0);
-        assertEquals(item.getSTeamId(), "team1");
-        assertEquals(item.getTeamCode(), "code123");
-        assertEquals(item.getTeamName(), "Test Team");
-        assertEquals(item.getTerritoryName(), "US");
-        assertEquals(item.getInternalSalesPersonMsid(), "INT001");
-        assertEquals(item.getExternalSalesPersonFullName(), "Jane External");
+        SalescoverageDataItem output = result.get(0);
+        assertEquals(output.getSTeamId(), "ST123");
+        assertEquals(output.getTeamCode(), "TC456");
+        assertEquals(output.getTeamName(), "Team A");
+        assertEquals(output.getSfTerritoryId(), "Territory123");
+        assertEquals(output.getExternalSalesPersonFullName(), "Jane Doe");
     }
 }
