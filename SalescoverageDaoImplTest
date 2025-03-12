@@ -1,0 +1,55 @@
+package com.msim.seismic_datafeed.jobs.salescoverage;
+
+import com.msim.seismic_datafeed.jobs.salescoverage.model.SalescoverageData;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.dao.DataAccessException;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Test;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.mockito.Mockito.*;
+import static org.testng.Assert.*;
+
+public class SalescoverageDaoImplTest {
+
+    private SalescoverageDaoImpl dao;
+
+    @Mock
+    private NamedParameterJdbcTemplate jdbcTemplate;
+
+    @BeforeMethod
+    public void setup() {
+        MockitoAnnotations.initMocks(this);
+        dao = new SalescoverageDaoImpl(jdbcTemplate);
+    }
+
+    @Test
+    public void testGetSalesCoverageRecords() {
+        Map<String, Object> record = new HashMap<>();
+        record.put("SF_TERRITORY_ID", "T001");
+        record.put("TEAM_NAME", "Sales Team");
+
+        when(jdbcTemplate.queryForList(anyString(), anyMap()))
+            .thenReturn(List.of(record));
+
+        List<SalescoverageData> result = dao.getSalesCoverageRecords();
+        
+        assertEquals(result.size(), 1);
+        assertEquals(result.get(0).getSfTerritoryId(), "territory1");
+        verify(jdbcTemplate).queryForList(anyString(), anyMap());
+    }
+
+    @Test(expectedExceptions = DataAccessException.class)
+    public void testFetchDataThrowsException() {
+        when(jdbcTemplate.queryForList(anyString(), anyMap()))
+            .thenThrow(new DataAccessException("DB Error"){});
+
+        dao.getSalesCoverageRecords();
+    }
+}
