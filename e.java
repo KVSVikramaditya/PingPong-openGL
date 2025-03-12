@@ -1,48 +1,41 @@
 package com.msim.seismic_datafeed.jobs.salescoverage;
 
+import com.msim.seismic_datafeed.dao.SalescoverageDaoImpl;
 import com.msim.seismic_datafeed.jobs.salescoverage.model.SalescoverageData;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.stereotype.Component;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Test;
 
+import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
-@Slf4j
-@Component
-public class SalescoverageDaoImpl implements SalescoverageDao {
+import static org.mockito.Mockito.when;
+import static org.testng.Assert.assertEquals;
 
-    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+public class SalescoverageDataProviderTest {
 
-    public SalescoverageDaoImpl(@Qualifier("snowflakeJdbcTemplate") NamedParameterJdbcTemplate snowflakeJdbcTemplate) {
-        this.namedParameterJdbcTemplate = snowflakeJdbcTemplate;
+    private SalescoverageDataProvider provider;
+
+    @Mock
+    private NamedParameterJdbcTemplate jdbcTemplate;
+
+    @Mock
+    private SalescoverageDaoImpl dao;
+
+    @BeforeMethod
+    public void setup() {
+        MockitoAnnotations.initMocks(this);
+        provider = new SalescoverageDataProvider(jdbcTemplate);
     }
 
-    @Override
-    public SalescoverageData getSalesCoverageRecords() {
-        log.info("Executing query to fetch sales coverage data from Snowflake");
-        
-        String sql = "SELECT * FROM V_TERRITORY_COVERAGE";
-        List<Map<String, Object>> rows = namedParameterJdbcTemplate.queryForList(sql, Map.of());
+    @Test
+    public void testFetchSalescoverageData() {
+        List<SalescoverageData> mockData = Arrays.asList(new SalescoverageData(), new SalescoverageData());
+        when(dao.getSalesCoverageRecords()).thenReturn(mockData);
 
-        // Return the first row mapped to SalescoverageData, or null if no rows
-        return rows.stream()
-                   .map(row -> {
-                       SalescoverageData data = new SalescoverageData();
-                       data.setSfTeamId((String) row.get("SF_TEAM_ID"));
-                       data.setTeamCode((String) row.get("TEAM_CODE"));
-                       data.setTeamName((String) row.get("TEAM_NAME"));
-                       data.setSfTerritoryId((String) row.get("SF_TERRITORY_ID"));
-                       data.setTerritoryCode((String) row.get("TERRITORY_CODE"));
-                       data.setTerritoryName((String) row.get("TERRITORY_NAME"));
-                       data.setInternalSalesPersonMsid((String) row.get("INTERNAL_SALES_PERSON_MSID"));
-                       data.setInternalSalesPersonFullName((String) row.get("INTERNAL_SALES_PERSON_FULL_NAME"));
-                       data.setExternalSalesPersonMsid((String) row.get("EXTERNAL_SALES_PERSON_MSID"));
-                       data.setExternalSalesPersonFullName((String) row.get("EXTERNAL_SALES_PERSON_FULL_NAME"));
-                       return data;
-                   })
-                   .findFirst()
-                   .orElse(null);
+        List<SalescoverageData> result = provider.fetchSalescoverageData();
+        assertEquals(result.size(), 2);
     }
 }
