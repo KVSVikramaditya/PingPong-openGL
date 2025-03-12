@@ -1,0 +1,42 @@
+package com.msim.seismic_datafeed.config;
+
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+import net.snowflake.client.jdbc.SnowflakeBasicDataSource;
+
+import static org.testng.Assert.*;
+
+public class SnowflakeDataSourceConfigTest {
+
+    private SnowflakeDataSourceConfig snowflakeConfig;
+
+    @BeforeMethod
+    public void setup() {
+        snowflakeConfig = new SnowflakeDataSourceConfig();
+        ReflectionTestUtils.setField(snowflakeDataSourceConfig, "sfJdbcConnectionUrl", "jdbc:snowflake://example.com");
+        ReflectionTestUtils.setField(snowflakeDataSourceConfig, "sfUsername", "testUser");
+        ReflectionTestUtils.setField(snowflakeDataSourceConfig, "sfRole", "testRole");
+        ReflectionTestUtils.setField(snowflakeDataSourceConfig, "sfDatabaseSchema", "testSchema");
+    }
+
+    @Test
+    public void testSnowflakeDataSourceCreation() {
+        SnowflakeBasicDataSource dataSource = snowflakeDataSourceConfig.getSnowflakeDataSource();
+        assert dataSource != null;
+        assert dataSource.getUrl().equals("jdbc:snowflake://example.com");
+        assert dataSource.getUser().equals("testUser");
+        assert dataSource.getRole().equals("testRole");
+        assert dataSource.getSchema() != null;
+        assertTrue(dataSource.isSsl());
+    }
+
+    @Test
+    public void testJdbcTemplateCreation() {
+        SnowflakeBasicDataSource dataSource = snowflakeDataSourceConfig.snowflakeDataSource();
+        NamedParameterJdbcTemplate template = snowflakeDataSourceConfig.getSnowflakeJdbcTemplate();
+        assertNotNull(template);
+        assertEquals(template.getJdbcOperations().getDataSource(), dataSource);
+    }
+}
