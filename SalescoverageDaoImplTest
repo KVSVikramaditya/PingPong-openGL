@@ -1,59 +1,43 @@
-package com.ms.datalink.globalDatalink.controller;
+public void execute() {
+    String groupName = "msjavacone";
+    String theUser = "vadimb";
 
-import com.ms.infra.directory.FirmwideDirectory;
-import com.ms.infra.directory.data.Person;
-import com.ms.infra.directory.repo.GroupRepo;
-import com.ms.infra.directory.repo.PersonRepo;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
+    GroupRepo groupRepo = firmwideDirectory.groupRepo();
+    PersonRepo personRepo = firmwideDirectory.personRepo();
 
-import java.util.Optional;
-import java.util.stream.Stream;
+    Optional<Person> userOpt = personRepo.getPersonByUID(theUser);
+    if (userOpt.isEmpty()) {
+        System.out.println("User with UID '" + theUser + "' not found.");
+        return;
+    }
 
-@Component
-public class Authentication {
+    Person targetUser = userOpt.get();
 
-    private static final Logger log = LoggerFactory.getLogger(Authentication.class);
+    Optional<Stream<Person>> membersOpt = groupRepo
+            .getGroupByName(groupName)
+            .map(group -> groupRepo.populateMembers(group, "cn"))
+            .map(group -> group.membersByType(Person.class));
 
-    @Autowired
-    private FirmwideDirectory firmwideDirectory;
+    if (membersOpt.isPresent()) {
+        Stream<Person> members = membersOpt.get();
 
-    public void execute() {
-        String groupName = "msjavacone";
-        String theUser = "vadimb";
+        System.out.println("Members of group: " + groupName);
+        boolean[] isUserPresent = {false};
 
-        GroupRepo groupRepo = firmwideDirectory.groupRepo();
-        PersonRepo personRepo = firmwideDirectory.personRepo();
-
-        Optional<Stream<Person>> membersOpt = groupRepo
-                .getGroupByName(groupName)
-                .map(group -> groupRepo.populateMembers(group, "cn"))
-                .map(group -> group.membersByType(Person.class));
-
-        if (membersOpt.isPresent()) {
-            Stream<Person> members = membersOpt.get();
-
-            System.out.println("Members of group: " + groupName);
-            boolean[] found = {false}; // Mutable flag to check user presence
-
-            members.forEach(person -> {
-                String name = person.fullName().orElse("no-name");
-                System.out.println(name);
-                if (person.uid().equals(theUser)) {
-                    found[0] = true;
-                }
-            });
-
-            if (found[0]) {
-                System.out.println("User '" + theUser + "' is a member of the group.");
-            } else {
-                System.out.println("User '" + theUser + "' is NOT a member of the group.");
+        members.forEach(person -> {
+            System.out.println(person.fullName().orElse("no-name"));
+            if (person.uid().equalsIgnoreCase(targetUser.uid())) {
+                isUserPresent[0] = true;
             }
+        });
 
+        if (isUserPresent[0]) {
+            System.out.println("User '" + theUser + "' IS a member of the group.");
         } else {
-            System.out.println("Group '" + groupName + "' not found.");
+            System.out.println(" User '" + theUser + "' is NOT a member of the group.");
         }
+
+    } else {
+        System.out.println("Group '" + groupName + "' not found.");
     }
 }
