@@ -1,55 +1,59 @@
-package com.msim.seismic_datafeed.jobs.salescoverage;
+package com.ms.datalink.globalDatalink.controller;
 
-import com.msim.seismic_datafeed.jobs.salescoverage.model.SalescoverageData;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.dao.DataAccessException;
-import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.Test;
+import com.ms.infra.directory.FirmwideDirectory;
+import com.ms.infra.directory.data.Person;
+import com.ms.infra.directory.repo.GroupRepo;
+import com.ms.infra.directory.repo.PersonRepo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Stream;
 
-import static org.mockito.Mockito.*;
-import static org.testng.Assert.*;
+@Component
+public class Authentication {
 
-public class SalescoverageDaoImplTest {
+    private static final Logger log = LoggerFactory.getLogger(Authentication.class);
 
-    private SalescoverageDaoImpl dao;
+    @Autowired
+    private FirmwideDirectory firmwideDirectory;
 
-    @Mock
-    private NamedParameterJdbcTemplate jdbcTemplate;
+    public void execute() {
+        String groupName = "msjavacone";
+        String theUser = "vadimb";
 
-    @BeforeMethod
-    public void setup() {
-        MockitoAnnotations.initMocks(this);
-        dao = new SalescoverageDaoImpl(jdbcTemplate);
-    }
+        GroupRepo groupRepo = firmwideDirectory.groupRepo();
+        PersonRepo personRepo = firmwideDirectory.personRepo();
 
-    @Test
-    public void testGetSalesCoverageRecords() {
-        Map<String, Object> record = new HashMap<>();
-        record.put("SF_TERRITORY_ID", "T001");
-        record.put("TEAM_NAME", "Sales Team");
+        Optional<Stream<Person>> membersOpt = groupRepo
+                .getGroupByName(groupName)
+                .map(group -> groupRepo.populateMembers(group, "cn"))
+                .map(group -> group.membersByType(Person.class));
 
-        when(jdbcTemplate.queryForList(anyString(), anyMap()))
-            .thenReturn(List.of(record));
+        if (membersOpt.isPresent()) {
+            Stream<Person> members = membersOpt.get();
 
-        List<SalescoverageData> result = dao.getSalesCoverageRecords();
-        
-        assertEquals(result.size(), 1);
-        assertEquals(result.get(0).getSfTerritoryId(), "territory1");
-        verify(jdbcTemplate).queryForList(anyString(), anyMap());
-    }
+            System.out.println("Members of group: " + groupName);
+            boolean[] found = {false}; // Mutable flag to check user presence
 
-    @Test(expectedExceptions = DataAccessException.class)
-    public void testFetchDataThrowsException() {
-        when(jdbcTemplate.queryForList(anyString(), anyMap()))
-            .thenThrow(new DataAccessException("DB Error"){});
+            members.forEach(person -> {
+                String name = person.fullName().orElse("no-name");
+                System.out.println(name);
+                if (person.uid().equals(theUser)) {
+                    found[0] = true;
+                }
+            });
 
-        dao.getSalesCoverageRecords();
+            if (found[0]) {
+                System.out.println("User '" + theUser + "' is a member of the group.");
+            } else {
+                System.out.println("User '" + theUser + "' is NOT a member of the group.");
+            }
+
+        } else {
+            System.out.println("Group '" + groupName + "' not found.");
+        }
     }
 }
