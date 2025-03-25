@@ -1,6 +1,10 @@
-dependencies {
-    implementation "org.springframework.boot:spring-boot-starter-security"
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
-    implementation "org.springframework.security:spring-security-kerberos-web:1.0.1.RELEASE"
-    implementation "org.springframework.security:spring-security-kerberos-core:1.0.1.RELEASE"
+@PostMapping("/submitDocument")
+public ResponseEntity<?> submitDocument(@RequestBody String folderName) {
+    String user = SecurityContextHolder.getContext().getAuthentication().getName();
+    System.out.println("Logged-in user: " + user);
+    // Proceed with group check if needed
+    return ResponseEntity.ok("Success");
 }
