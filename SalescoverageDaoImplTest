@@ -1,43 +1,50 @@
-public void execute() {
-    String groupName = "msjavacone";
-    String theUser = "vadimb";
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.kerberos.web.authentication.SpnegoAuthenticationProcessingFilter;
+import org.springframework.security.kerberos.authentication.sun.SunJaasKerberosTicketValidator;
+import org.springframework.security.kerberos.authentication.KerberosAuthenticationProvider;
+import org.springframework.security.kerberos.client.KerberosRestTemplate;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.context.annotation.Bean;
 
-    GroupRepo groupRepo = firmwideDirectory.groupRepo();
-    PersonRepo personRepo = firmwideDirectory.personRepo();
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
-    Optional<Person> userOpt = personRepo.getPersonByUID(theUser);
-    if (userOpt.isEmpty()) {
-        System.out.println("User with UID '" + theUser + "' not found.");
-        return;
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+            .authorizeRequests()
+                .antMatchers("/api/frontend/submitDocument").authenticated()
+                .anyRequest().permitAll()
+            .and()
+                .addFilterBefore(spnegoAuthenticationProcessingFilter(), BasicAuthenticationFilter.class)
+            .httpBasic()
+            .and()
+                .csrf().disable();
     }
 
-    Person targetUser = userOpt.get();
+    @Bean
+    public SpnegoAuthenticationProcessingFilter spnegoAuthenticationProcessingFilter() throws Exception {
+        SpnegoAuthenticationProcessingFilter filter = new SpnegoAuthenticationProcessingFilter();
+        filter.setAuthenticationManager(authenticationManagerBean());
+        return filter;
+    }
 
-    Optional<Stream<Person>> membersOpt = groupRepo
-            .getGroupByName(groupName)
-            .map(group -> groupRepo.populateMembers(group, "cn"))
-            .map(group -> group.membersByType(Person.class));
+    @Bean
+    public KerberosAuthenticationProvider kerberosAuthenticationProvider() {
+        KerberosAuthenticationProvider provider = new KerberosAuthenticationProvider();
+        provider.setTicketValidator(sunJaasKerberosTicketValidator());
+        return provider;
+    }
 
-    if (membersOpt.isPresent()) {
-        Stream<Person> members = membersOpt.get();
-
-        System.out.println("Members of group: " + groupName);
-        boolean[] isUserPresent = {false};
-
-        members.forEach(person -> {
-            System.out.println(person.fullName().orElse("no-name"));
-            if (person.uid().equalsIgnoreCase(targetUser.uid())) {
-                isUserPresent[0] = true;
-            }
-        });
-
-        if (isUserPresent[0]) {
-            System.out.println("User '" + theUser + "' IS a member of the group.");
-        } else {
-            System.out.println(" User '" + theUser + "' is NOT a member of the group.");
-        }
-
-    } else {
-        System.out.println("Group '" + groupName + "' not found.");
+    @Bean
+    public SunJaasKerberosTicketValidator sunJaasKerberosTicketValidator() {
+        SunJaasKerberosTicketValidator validator = new SunJaasKerberosTicketValidator();
+        validator.setServicePrincipal("HTTP/your-hostname@YOUR.REALM.COM"); // set your service principal here
+        validator.setKeyTabLocation(new org.springframework.core.io.FileSystemResource("/etc/krb5.keytab")); // adjust path
+        return validator;
     }
 }
