@@ -1,13 +1,9 @@
+package com.ms.datalink.globalDatalink.config;
+
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
-import org.springframework.security.kerberos.web.authentication.SpnegoAuthenticationProcessingFilter;
-import org.springframework.security.kerberos.authentication.sun.SunJaasKerberosTicketValidator;
-import org.springframework.security.kerberos.authentication.KerberosAuthenticationProvider;
-import org.springframework.security.kerberos.client.KerberosRestTemplate;
-import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
-import org.springframework.context.annotation.Bean;
 
 @Configuration
 @EnableWebSecurity
@@ -20,31 +16,8 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .antMatchers("/api/frontend/submitDocument").authenticated()
                 .anyRequest().permitAll()
             .and()
-                .addFilterBefore(spnegoAuthenticationProcessingFilter(), BasicAuthenticationFilter.class)
-            .httpBasic()
+                .httpBasic() // Optional: disable if internal Kerberos handles session auth
             .and()
                 .csrf().disable();
-    }
-
-    @Bean
-    public SpnegoAuthenticationProcessingFilter spnegoAuthenticationProcessingFilter() throws Exception {
-        SpnegoAuthenticationProcessingFilter filter = new SpnegoAuthenticationProcessingFilter();
-        filter.setAuthenticationManager(authenticationManagerBean());
-        return filter;
-    }
-
-    @Bean
-    public KerberosAuthenticationProvider kerberosAuthenticationProvider() {
-        KerberosAuthenticationProvider provider = new KerberosAuthenticationProvider();
-        provider.setTicketValidator(sunJaasKerberosTicketValidator());
-        return provider;
-    }
-
-    @Bean
-    public SunJaasKerberosTicketValidator sunJaasKerberosTicketValidator() {
-        SunJaasKerberosTicketValidator validator = new SunJaasKerberosTicketValidator();
-        validator.setServicePrincipal("HTTP/your-hostname@YOUR.REALM.COM"); // set your service principal here
-        validator.setKeyTabLocation(new org.springframework.core.io.FileSystemResource("/etc/krb5.keytab")); // adjust path
-        return validator;
     }
 }
