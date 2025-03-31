@@ -2,30 +2,27 @@ package com.ms.datalink.globalDatalink.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     /**
-     * This security filter chain secures incoming requests.
-     * It DOES NOT affect any outgoing HTTP calls like RestTemplate or WebClient.
+     * This SecurityFilterChain secures incoming requests:
+     * - /api/frontend/submitDocument requires authentication
+     * - All other endpoints are publicly accessible
+     * - CSRF protection is disabled (common for APIs)
      */
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(auth -> auth
-                // Require authentication for the document submission endpoint
                 .antMatchers("/api/frontend/submitDocument").authenticated()
-
-                // Allow all other endpoints (e.g., health checks, home page, etc.)
                 .anyRequest().permitAll()
             )
-
-            // Disable CSRF for REST APIs (especially if you're not using cookies/session)
             .csrf().disable();
 
         return http.build();
