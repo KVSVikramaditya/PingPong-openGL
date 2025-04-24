@@ -1,35 +1,27 @@
-package com.example.demo.config;
+Hey Jay, hope you’re doing well! Quick context from my OIDC demo: on the client side I’ve got both the client-app ID and the resource-server ID wired up, and on the resource server only its own ID. Flow is basically:
 
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.core.GrantedAuthorityDefaults;
-import org.springframework.security.web.SecurityFilterChain;
+Client creds → Auth server → get JWT
 
-@Configuration
-public class AuthConfig {
+Client calls resource server with that JWT
 
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-          // require authentication for every endpoint
-          .authorizeRequests(a -> a
-            .anyRequest().authenticated()
-          )
-          // enable JWT‐based OAuth2 resource server support
-          .oauth2ResourceServer(oauth2 -> oauth2
-            .jwt(jwt -> jwt
-              .jwtAuthenticationConverter(
-                AuthUtil.getJwtAuthenticationConverter()
-              )
-            )
-          );
-        return http.build();
-    }
+Resource server intercepts & validates the token → grants access
 
-    @Bean
-    public GrantedAuthorityDefaults grantedAuthorityDefaults() {
-        // remove the default "ROLE_" prefix so your SCOPE_* authorities map cleanly
-        return new GrantedAuthorityDefaults("");
-    }
-}
+I’ve got a few quick questions:
+
+Client whitelisting: What’s the cleanest way to only allow certain clients on the resource server? Check the azp/aud claim, inspect headers, or is there a built-in Spring config?
+
+Swagger/UI access: For testing in a browser, do you hook up an Auth-Code flow or just drop in a token manually?
+
+WebStax setup: Any tips on the route spec acClientIds, profiles to enable, or gotchas when the gateway enforces client-credentials?
+
+Docker → WebStax: Best practices for building the image (env vars, JWK URIs), updating the WebStax spec, and handling private-key JWT secrets?
+
+Could you hop on a quick Teams call today to chat through any time you’re free? Would really appreciate it!
+
+
+
+
+
+
+
+
