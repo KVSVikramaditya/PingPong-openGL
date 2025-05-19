@@ -1,27 +1,43 @@
-Hey Jay, hope you’re doing well! Quick context from my OIDC demo: on the client side I’ve got both the client-app ID and the resource-server ID wired up, and on the resource server only its own ID. Flow is basically:
+package com.ms.datalink.globalDatalink.service;
 
-Client creds → Auth server → get JWT
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Base64;
+import java.util.Map;
 
-Client calls resource server with that JWT
+public class ReceiveRequest {
 
-Resource server intercepts & validates the token → grants access
+    public void receiveRequest(Map<String, Object> request) {
+        System.out.println("Received request: " + request);
 
-I’ve got a few quick questions:
+        // 1) Extract fields from the request map
+        String fileName      = (String) request.get("fileName");
+        Number submissionNum = (Number) request.get("submissionid");
+        String targetId      = String.valueOf(request.get("targetld"));
+        String base64Content = (String) request.get("fileContent");
 
-Client whitelisting: What’s the cleanest way to only allow certain clients on the resource server? Check the azp/aud claim, inspect headers, or is there a built-in Spring config?
+        // 2) Decode and write to file
+        try {
+            byte[] fileBytes = Base64.getDecoder().decode(base64Content);
 
-Swagger/UI access: For testing in a browser, do you hook up an Auth-Code flow or just drop in a token manually?
+            // build path: e.g. C:\Users\vikramad\Downloads\client dummy\Outgoing\Timestamp_15844\MS….
+            Path outputDir = Paths.get(
+                "C:", "Users", "vikramad", "Downloads", "client dummy", "Outgoing",
+                "Timestamp_" + submissionNum.intValue()
+            );
+            Files.createDirectories(outputDir);
 
-WebStax setup: Any tips on the route spec acClientIds, profiles to enable, or gotchas when the gateway enforces client-credentials?
+            Path outputFile = outputDir.resolve(fileName);
+            Files.write(outputFile, fileBytes);
 
-Docker → WebStax: Best practices for building the image (env vars, JWK URIs), updating the WebStax spec, and handling private-key JWT secrets?
+            System.out.println("File written to: " + outputFile);
 
-Could you hop on a quick Teams call today to chat through any time you’re free? Would really appreciate it!
-
-
-
-
-
-
-
-
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Failed to write file for submission "
+                + submissionNum + ", target " + targetId, e);
+        }
+    }
+}
