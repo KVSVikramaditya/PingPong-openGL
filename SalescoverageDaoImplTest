@@ -6,42 +6,67 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class SubmissionService {
-    // ... your existing beans and methods ...
+
+    // … inject RestTemplate, JwtService, etc. …
 
     public void processSubmission(SubmissionRequest req) {
         List<MetadataSourceFile> sourceFiles = mapToMetadataSourceFiles(req);
-        
-        // now you can save or further process these objects:
         sourceFiles.forEach(this::saveMetadataSourceFile);
-        
         // continue with uploads, etc.
     }
 
     private List<MetadataSourceFile> mapToMetadataSourceFiles(SubmissionRequest req) {
         return req.getItems().stream()
-            // for each Item, iterate its targetFileMap entries
-            .flatMap(item -> item.getTargetFileMap().entrySet().stream()
-                .map(entry -> {
-                    String lang     = entry.getKey();
-                    String targetFn = entry.getValue();
+            .flatMap(item -> {
+                // 1) parse raw "A | B & C | D" → ["A","B,C","D"]
+                List<String> groups = parseTargetLanguages(item.getTargetLanguage());
 
+                // 2) for each group, build a MetadataSourceFile
+                return groups.stream().map(langGroup -> {
                     MetadataSourceFile msf = new MetadataSourceFile();
                     msf.setClientid(item.getSourceAccountId());
-                    msf.setFilename(targetFn);
+                    // you can still lookup a specific filename if desired:
+                    String fn = item.getTargetFileMap().get(langGroup);
+                    msf.setFilename(fn != null ? fn : item.getFileName());
                     msf.setFiletype(item.getMimeType());
                     msf.setSource_content_id(UUID.randomUUID().toString());
                     msf.setSourceLanguage(req.getSourceLanguage());
-                    msf.setTargetLanguage(lang);
+                    msf.setTargetLanguage(langGroup);
                     return msf;
-                })
-            )
+                });
+            })
             .collect(Collectors.toList());
     }
 
+    /**
+     * Split on '|' first, then if a chunk contains '&' join those parts with commas.
+     * e.g. "A | B & C | D" → ["A","B,C","D"]
+     */
+    private List<String> parseTargetLanguages(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return Collections.emptyList();
+        }
+
+        return Arrays.stream(raw.split("\\|"))
+                     .map(String::trim)
+                     .filter(s -> !s.isEmpty())
+                     .map(chunk -> {
+                         if (chunk.contains("&")) {
+                             return Arrays.stream(chunk.split("&"))
+                                          .map(String::trim)
+                                          .filter(t -> !t.isEmpty())
+                                          .collect(Collectors.joining(","));
+                         }
+                         return chunk;
+                     })
+                     .collect(Collectors.toList());
+    }
+
     private void saveMetadataSourceFile(MetadataSourceFile msf) {
-        // e.g. repository.save(msf) or however you persist it
+        // your persistence logic here
     }
 }
