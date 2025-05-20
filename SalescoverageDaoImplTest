@@ -1,43 +1,32 @@
-package com.ms.datalink.globalDatalink.service;
+package com.ms.datalink.globalDatalink.dto;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Base64;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
+
+import java.util.List;
 import java.util.Map;
 
-public class ReceiveRequest {
+/**
+ * Model class mapping the incoming submission request JSON.
+ */
+@Data
+public class SubmissionRequest {
 
-    public void receiveRequest(Map<String, Object> request) {
-        System.out.println("Received request: " + request);
+    private String name;
+    private String dueDate;
+    private int projectId;
+    private String sourceLanguage;
+    private String priority;
+    private int workflowId;
+    private List<Item> items;
 
-        // 1) Extract fields from the request map
-        String fileName      = (String) request.get("fileName");
-        Number submissionNum = (Number) request.get("submissionid");
-        String targetId      = String.valueOf(request.get("targetld"));
-        String base64Content = (String) request.get("fileContent");
-
-        // 2) Decode and write to file
-        try {
-            byte[] fileBytes = Base64.getDecoder().decode(base64Content);
-
-            // build path: e.g. C:\Users\vikramad\Downloads\client dummy\Outgoing\Timestamp_15844\MS….
-            Path outputDir = Paths.get(
-                "C:", "Users", "vikramad", "Downloads", "client dummy", "Outgoing",
-                "Timestamp_" + submissionNum.intValue()
-            );
-            Files.createDirectories(outputDir);
-
-            Path outputFile = outputDir.resolve(fileName);
-            Files.write(outputFile, fileBytes);
-
-            System.out.println("File written to: " + outputFile);
-
-        } catch (IOException e) {
-            e.printStackTrace();
-            throw new RuntimeException("Failed to write file for submission "
-                + submissionNum + ", target " + targetId, e);
-        }
+    @Data
+    public static class Item {
+        private String fileName;
+        private String sourceAccountId;
+        private String mimeType;
+        private String data;
+        private String targetLanguage;
+        private Map<String, String> targetFileMap;
     }
 }
