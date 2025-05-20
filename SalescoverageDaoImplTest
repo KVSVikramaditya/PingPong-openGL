@@ -1,32 +1,47 @@
-package com.ms.datalink.globalDatalink.dto;
+package com.ms.datalink.globalDatalink.service;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Data;
+import com.ms.datalink.globalDatalink.dto.SubmissionRequest;
+import com.ms.datalink.globalDatalink.model.MetadataSourceFile;
+import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
-/**
- * Model class mapping the incoming submission request JSON.
- */
-@Data
-public class SubmissionRequest {
+@Service
+public class SubmissionService {
+    // ... your existing beans and methods ...
 
-    private String name;
-    private String dueDate;
-    private int projectId;
-    private String sourceLanguage;
-    private String priority;
-    private int workflowId;
-    private List<Item> items;
+    public void processSubmission(SubmissionRequest req) {
+        List<MetadataSourceFile> sourceFiles = mapToMetadataSourceFiles(req);
+        
+        // now you can save or further process these objects:
+        sourceFiles.forEach(this::saveMetadataSourceFile);
+        
+        // continue with uploads, etc.
+    }
 
-    @Data
-    public static class Item {
-        private String fileName;
-        private String sourceAccountId;
-        private String mimeType;
-        private String data;
-        private String targetLanguage;
-        private Map<String, String> targetFileMap;
+    private List<MetadataSourceFile> mapToMetadataSourceFiles(SubmissionRequest req) {
+        return req.getItems().stream()
+            // for each Item, iterate its targetFileMap entries
+            .flatMap(item -> item.getTargetFileMap().entrySet().stream()
+                .map(entry -> {
+                    String lang     = entry.getKey();
+                    String targetFn = entry.getValue();
+
+                    MetadataSourceFile msf = new MetadataSourceFile();
+                    msf.setClientid(item.getSourceAccountId());
+                    msf.setFilename(targetFn);
+                    msf.setFiletype(item.getMimeType());
+                    msf.setSource_content_id(UUID.randomUUID().toString());
+                    msf.setSourceLanguage(req.getSourceLanguage());
+                    msf.setTargetLanguage(lang);
+                    return msf;
+                })
+            )
+            .collect(Collectors.toList());
+    }
+
+    private void saveMetadataSourceFile(MetadataSourceFile msf) {
+        // e.g. repository.save(msf) or however you persist it
     }
 }
