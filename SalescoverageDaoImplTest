@@ -1,98 +1,13 @@
-List<Map<String, Object>> filePayloadList = new ArrayList<>();
-
-for (Map.Entry<Integer, List<String[]>> entry : submissionTargetMap.entrySet()) {
-    int submissionId = entry.getKey();
-    List<String[]> targetRows = entry.getValue();
-
-    for (String[] row : targetRows) {
-        String targetId = row[13];
-        String sourceAccountId = row[3];
-        String translationId = row[4];
-        String targetLanguage = row[6];
-        String originalFileName = row[0];
-
-        String baseFileName = originalFileName.contains(".")
-                ? originalFileName.substring(0, originalFileName.lastIndexOf('.'))
-                : originalFileName;
-        String fileExtension = originalFileName.contains(".")
-                ? originalFileName.substring(originalFileName.lastIndexOf('.'))
-                : "";
-
-        String targetFileName = baseFileName + "_" + targetLanguage + "_" + targetId + fileExtension;
-        String url = String.format("%s/rest/v/submissions/%d/targets/%s/download/deliverable",
-                backendApiUrl, submissionId, targetId);
-        log.info("Downloading from URL: {}", url);
-
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(authService.getToken());
-
-            ResponseEntity<byte[]> response = restTemplate.exchange(url, HttpMethod.GET,
-                    new HttpEntity<>(headers), byte[].class);
-
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                byte[] fileBytes = response.getBody();
-                String fileBase64 = Base64.getEncoder().encodeToString(fileBytes);
-
-                Map<String, Object> requestBody = new HashMap<>();
-                requestBody.put("filename", targetFileName);
-                requestBody.put("sourceFilename", originalFileName);
-                requestBody.put("filetype", fileExtension.replace(".", ""));
-                requestBody.put("targetFileName", targetFileName);
-                requestBody.put("sourceContentId", sourceAccountId);
-                requestBody.put("sourceLanguage", row[7]);
-                requestBody.put("targetLanguage", row[6]);
-                requestBody.put("submissionId", String.valueOf(submissionId));
-                requestBody.put("fileContent", fileBase64);
-                requestBody.put("targetId", targetId);
-
-                filePayloadList.add(requestBody);
-
-                // Optional: Save file locally and update metadata
-                Path filePathToSave = folderPath.resolve(targetFileName);
-                Files.write(filePathToSave, fileBytes);
-                log.info("File saved: {}", filePathToSave);
-
-                metadataEntries.add(new String[] {
-                        originalFileName,
-                        row[7],
-                        sourceAccountId,
-                        targetFileName,
-                        row[6],
-                        "DOWNLOADED",
-                        String.valueOf(submissionId),
-                        targetId
-                });
-
-                submissionIdList.add(submissionId);
-                row[15] = "DOWNLOADED";
-            } else {
-                log.warn("Failed to download file for targetId: {}. HTTP Status: {}", targetId, response.getStatusCode());
-            }
-        } catch (Exception e) {
-            log.error("Error while downloading file for targetId: {}", targetId, e);
-        }
-    }
-}
-
-// Send all collected payloads in one request
-Map<String, Object> fullPayload = new HashMap<>();
-fullPayload.put("payload", filePayloadList);
-
-HttpHeaders postHeaders = new HttpHeaders();
-postHeaders.setContentType(MediaType.APPLICATION_JSON);
-
-HttpEntity<Map<String, Object>> postEntity = new HttpEntity<>(fullPayload, postHeaders);
-String externalEndpoint = "http://localhost:8082/receive-request";
-
-try {
-    ResponseEntity<String> postResponse = new RestTemplate().postForEntity(externalEndpoint, postEntity, String.class);
-    if (postResponse.getStatusCode() == HttpStatus.OK) {
-        log.info("Successfully sent all files to external endpoint.");
-    } else {
-        log.warn("Failed to send files. HTTP Status: {}", postResponse.getStatusCode());
-    }
-} catch (Exception ex) {
-    log.error("Error sending files to external endpoint", ex);
-}
+String batchName = batchFileMap.entrySet()
+    .stream()
+    .filter(entry -> entry.getValue()
+        .stream()
+        .anyMatch(metadata ->
+            metadata.getFilename().equals(target.getDocumentName())
+            && metadata.getTargetLanguage().equalsIgnoreCase(target.getTargetLanguage())
+            && metadata.getSourceContentId().equals(target.getSourceContentId())
+        )
+    )
+    .findFirst()
+    .map(Map.Entry::getKey)
+    .orElse("Unknown Batch");
