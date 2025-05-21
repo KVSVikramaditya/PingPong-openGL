@@ -3,9 +3,10 @@ String batchName = batchFileMap.entrySet()
     .filter(entry -> entry.getValue()
         .stream()
         .anyMatch(metadata ->
-            metadata.getFilename().equals(target.getDocumentName())
-            && metadata.getTargetLanguage().equalsIgnoreCase(target.getTargetLanguage())
-            && metadata.getSourceContentId().equals(target.getSourceContentId())
+            metadata.getFilename().equals(target.getDocumentName()) &&
+            Arrays.stream(metadata.getTargetLanguage().split(","))
+                .map(String::trim)
+                .anyMatch(lang -> lang.equalsIgnoreCase(target.getTargetLanguage())) 
         )
     )
     .findFirst()
