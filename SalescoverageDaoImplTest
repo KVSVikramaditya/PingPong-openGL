@@ -1,72 +1,98 @@
-package com.ms.datalink.globalDatalink.service;
+List<Map<String, Object>> filePayloadList = new ArrayList<>();
 
-import com.ms.datalink.globalDatalink.dto.SubmissionRequest;
-import com.ms.datalink.globalDatalink.model.MetadataSourceFile;
-import org.springframework.stereotype.Service;
+for (Map.Entry<Integer, List<String[]>> entry : submissionTargetMap.entrySet()) {
+    int submissionId = entry.getKey();
+    List<String[]> targetRows = entry.getValue();
 
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+    for (String[] row : targetRows) {
+        String targetId = row[13];
+        String sourceAccountId = row[3];
+        String translationId = row[4];
+        String targetLanguage = row[6];
+        String originalFileName = row[0];
 
-@Service
-public class SubmissionService {
+        String baseFileName = originalFileName.contains(".")
+                ? originalFileName.substring(0, originalFileName.lastIndexOf('.'))
+                : originalFileName;
+        String fileExtension = originalFileName.contains(".")
+                ? originalFileName.substring(originalFileName.lastIndexOf('.'))
+                : "";
 
-    // … inject RestTemplate, JwtService, etc. …
+        String targetFileName = baseFileName + "_" + targetLanguage + "_" + targetId + fileExtension;
+        String url = String.format("%s/rest/v/submissions/%d/targets/%s/download/deliverable",
+                backendApiUrl, submissionId, targetId);
+        log.info("Downloading from URL: {}", url);
 
-    public void processSubmission(SubmissionRequest req) {
-        List<MetadataSourceFile> sourceFiles = mapToMetadataSourceFiles(req);
-        sourceFiles.forEach(this::saveMetadataSourceFile);
-        // continue with uploads, etc.
-    }
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(authService.getToken());
 
-    private List<MetadataSourceFile> mapToMetadataSourceFiles(SubmissionRequest req) {
-        return req.getItems().stream()
-            .flatMap(item -> {
-                // 1) parse raw "A | B & C | D" → ["A","B,C","D"]
-                List<String> groups = parseTargetLanguages(item.getTargetLanguage());
+            ResponseEntity<byte[]> response = restTemplate.exchange(url, HttpMethod.GET,
+                    new HttpEntity<>(headers), byte[].class);
 
-                // 2) for each group, build a MetadataSourceFile
-                return groups.stream().map(langGroup -> {
-                    MetadataSourceFile msf = new MetadataSourceFile();
-                    msf.setClientid(item.getSourceAccountId());
-                    // you can still lookup a specific filename if desired:
-                    String fn = item.getTargetFileMap().get(langGroup);
-                    msf.setFilename(fn != null ? fn : item.getFileName());
-                    msf.setFiletype(item.getMimeType());
-                    msf.setSource_content_id(UUID.randomUUID().toString());
-                    msf.setSourceLanguage(req.getSourceLanguage());
-                    msf.setTargetLanguage(langGroup);
-                    return msf;
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                byte[] fileBytes = response.getBody();
+                String fileBase64 = Base64.getEncoder().encodeToString(fileBytes);
+
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("filename", targetFileName);
+                requestBody.put("sourceFilename", originalFileName);
+                requestBody.put("filetype", fileExtension.replace(".", ""));
+                requestBody.put("targetFileName", targetFileName);
+                requestBody.put("sourceContentId", sourceAccountId);
+                requestBody.put("sourceLanguage", row[7]);
+                requestBody.put("targetLanguage", row[6]);
+                requestBody.put("submissionId", String.valueOf(submissionId));
+                requestBody.put("fileContent", fileBase64);
+                requestBody.put("targetId", targetId);
+
+                filePayloadList.add(requestBody);
+
+                // Optional: Save file locally and update metadata
+                Path filePathToSave = folderPath.resolve(targetFileName);
+                Files.write(filePathToSave, fileBytes);
+                log.info("File saved: {}", filePathToSave);
+
+                metadataEntries.add(new String[] {
+                        originalFileName,
+                        row[7],
+                        sourceAccountId,
+                        targetFileName,
+                        row[6],
+                        "DOWNLOADED",
+                        String.valueOf(submissionId),
+                        targetId
                 });
-            })
-            .collect(Collectors.toList());
-    }
 
-    /**
-     * Split on '|' first, then if a chunk contains '&' join those parts with commas.
-     * e.g. "A | B & C | D" → ["A","B,C","D"]
-     */
-    private List<String> parseTargetLanguages(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return Collections.emptyList();
+                submissionIdList.add(submissionId);
+                row[15] = "DOWNLOADED";
+            } else {
+                log.warn("Failed to download file for targetId: {}. HTTP Status: {}", targetId, response.getStatusCode());
+            }
+        } catch (Exception e) {
+            log.error("Error while downloading file for targetId: {}", targetId, e);
         }
-
-        return Arrays.stream(raw.split("\\|"))
-                     .map(String::trim)
-                     .filter(s -> !s.isEmpty())
-                     .map(chunk -> {
-                         if (chunk.contains("&")) {
-                             return Arrays.stream(chunk.split("&"))
-                                          .map(String::trim)
-                                          .filter(t -> !t.isEmpty())
-                                          .collect(Collectors.joining(","));
-                         }
-                         return chunk;
-                     })
-                     .collect(Collectors.toList());
     }
+}
 
-    private void saveMetadataSourceFile(MetadataSourceFile msf) {
-        // your persistence logic here
+// Send all collected payloads in one request
+Map<String, Object> fullPayload = new HashMap<>();
+fullPayload.put("payload", filePayloadList);
+
+HttpHeaders postHeaders = new HttpHeaders();
+postHeaders.setContentType(MediaType.APPLICATION_JSON);
+
+HttpEntity<Map<String, Object>> postEntity = new HttpEntity<>(fullPayload, postHeaders);
+String externalEndpoint = "http://localhost:8082/receive-request";
+
+try {
+    ResponseEntity<String> postResponse = new RestTemplate().postForEntity(externalEndpoint, postEntity, String.class);
+    if (postResponse.getStatusCode() == HttpStatus.OK) {
+        log.info("Successfully sent all files to external endpoint.");
+    } else {
+        log.warn("Failed to send files. HTTP Status: {}", postResponse.getStatusCode());
     }
+} catch (Exception ex) {
+    log.error("Error sending files to external endpoint", ex);
 }
