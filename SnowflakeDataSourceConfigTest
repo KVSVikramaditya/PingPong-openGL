@@ -1,36 +1,16 @@
-{
-  "name": "Commentaries-Apr25-SICAV-Batch1",
-  "dueDate": "T+2",
-  "projectId": 456,
-  "sourceLanguage": "en-gb",
-  "priority": "Standard",
-  "workflowId": 123,
-  "items": [
-    {
-      "fileName": "Commentaries-Apr25-SICAV-Batch1-Fund1-Italian.json",
-      "sourceAccountId": "123456789",
-      "mimeType": "application/json",
-      "data": "base64EncodedBinaryContent…",
-      "targetLanguage": "Italian | Spanish | CHINESE_HONGKONG & CHINESE_TAIWAN | French",
-      "targetFileMap": {
-        "ITALIAN": "Commentaries-Apr25-SICAV-Batch1-Fund1-Italian.json",
-        "SPANISH": "Commentaries-Apr25-SICAV-Batch1-Fund1-Spanish.json",
-        "CHINESE_HONGKONG": "Commentaries-Apr25-SICAV-Batch1-Fund1-CHINESE_HONGKONG.json",
-        "CHINESE_TAIWAN": "Commentaries-Apr25-SICAV-Batch1-Fund1-CHINESE_TAIWAN.json",
-        "FRENCH": "Commentaries-Apr25-SICAV-Batch1-Fund1-French.json"
-      }
-    },
-    {
-      "fileName": "test.json",
-      "sourceAccountId": "123456789",
-      "mimeType": "application/json",
-      "data": "base64EncodedBinaryContent…",
-      "targetLanguage": "Spanish | CHINESE_HONGKONG & CHINESE_TAIWAN",
-      "targetFileMap": {
-        "SPANISH": "test.json",
-        "CHINESE_HONGKONG": "test-CHINESE_HONGKONG.json",
-        "CHINESE_TAIWAN": "test-CHINESE_TAIWAN.json"
-      }
+@Configuration
+public class WebMvcConfiguration implements WebMvcConfigurer {
+
+    private final RateLimitingInterceptor rateLimitingInterceptor;
+
+    public WebMvcConfiguration(RateLimitingInterceptor rateLimitingInterceptor) {
+        this.rateLimitingInterceptor = rateLimitingInterceptor;
     }
-  ]
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        // other interceptors...
+        registry.addInterceptor(rateLimitingInterceptor)
+                .addPathPatterns("/save**", "/submit**"); // adjust as needed
+    }
 }
