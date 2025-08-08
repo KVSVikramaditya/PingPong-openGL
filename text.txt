@@ -1,1 +1,158 @@
-%LOCALAPPDATA%\JetBrains
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.HttpHost;
+import org.apache.http.impl.client.HttpClients;
+import org.springframework.http.*;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class TransPerfectTokenService {
+
+    private static final String NAMESPACE = "YOUR_NAMESPACE";
+    private static final String BASIC_KEY = "BASIC_KEY";
+    private static final String API_USERNAME = "API_USERNAME";
+    private static final String API_PASSWORD = "API_PASSWORD";
+    private static final String JWT_TOKEN_URL = "https://transperfect.example.com/oauth/token"; // your URL
+
+    // Skew so we refresh a little before the server thinks it’s expired
+    private static final Duration SKEW = Duration.ofSeconds(30);
+
+    private final SecureCredentialsVault scv;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    private final ReentrantLock lock = new ReentrantLock();
+
+    // Cached state
+    private volatile String accessToken;       // "Bearer ..." not necessary; return raw and add header elsewhere
+    private volatile String refreshToken;
+    private volatile Instant accessTokenExpiry = Instant.EPOCH;
+
+    public TransPerfectTokenService(SecureCredentialsVault scv) {
+        this.scv = scv;
+
+        // If you need the corporate proxy:
+        HttpHost proxy = new HttpHost("webproxy-inet.ms.com", 8080);
+        var client = HttpClients.custom().setProxy(proxy).build();
+        var rf = new HttpComponentsClientHttpRequestFactory(client);
+        this.restTemplate = new RestTemplate(rf);
+    }
+
+    public String getToken() {
+        if (isTokenValid()) {
+            return accessToken;
+        }
+
+        lock.lock();
+        try {
+            // double-check after acquiring the lock
+            if (isTokenValid()) {
+                return accessToken;
+            }
+
+            // Prefer refresh if we have it
+            if (refreshToken != null && !refreshToken.isBlank()) {
+                try {
+                    TokenResponse tr = refreshAccessToken(refreshToken);
+                    cache(tr);
+                    return accessToken;
+                } catch (Exception refreshEx) {
+                    // fall through to password grant
+                }
+            }
+
+            // Fresh login via password grant
+            TokenResponse tr = fetchNewAccessToken();
+            cache(tr);
+            return accessToken;
+
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private boolean isTokenValid() {
+        return accessToken != null && Instant.now().isBefore(accessTokenExpiry.minus(SKEW));
+    }
+
+    private void cache(TokenResponse tr) {
+        this.accessToken = tr.access_token;
+        this.refreshToken = tr.refresh_token;
+        Instant exp = Instant.now().plusSeconds(tr.expires_in);
+        this.accessTokenExpiry = exp;
+    }
+
+    private TokenResponse fetchNewAccessToken() {
+        String basicKey = scv.tellKey(NAMESPACE, BASIC_KEY).getDataAsString();
+        String apiUsername = scv.tellKey(NAMESPACE, API_USERNAME).getDataAsString();
+        String apiPassword = scv.tellKey(NAMESPACE, API_PASSWORD).getDataAsString();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        // NOTE: must have a space after "Basic"
+        headers.set("Authorization", "Basic " + basicKey);
+
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "password");
+        form.add("username", apiUsername);
+        form.add("password", apiPassword);
+
+        HttpEntity<MultiValueMap<String, String>> req = new HttpEntity<>(form, headers);
+
+        try {
+            ResponseEntity<String> resp = restTemplate.exchange(
+                    JWT_TOKEN_URL, HttpMethod.POST, req, String.class);
+            if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
+                throw new RuntimeException("Token endpoint returned " + resp.getStatusCode());
+            }
+            return mapper.readValue(resp.getBody(), TokenResponse.class);
+        } catch (RestClientException re) {
+            throw new RuntimeException("Error calling token endpoint", re);
+        } catch (Exception e) {
+            throw new RuntimeException("Error parsing token response", e);
+        }
+    }
+
+    private TokenResponse refreshAccessToken(String refreshToken) {
+        String basicKey = scv.tellKey(NAMESPACE, BASIC_KEY).getDataAsString();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.set("Authorization", "Basic " + basicKey);
+
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "refresh_token");
+        form.add("refresh_token", refreshToken);
+
+        HttpEntity<MultiValueMap<String, String>> req = new HttpEntity<>(form, headers);
+
+        try {
+            ResponseEntity<String> resp = restTemplate.exchange(
+                    JWT_TOKEN_URL, HttpMethod.POST, req, String.class);
+            if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
+                throw new RuntimeException("Refresh endpoint returned " + resp.getStatusCode());
+            }
+            return mapper.readValue(resp.getBody(), TokenResponse.class);
+        } catch (RestClientException re) {
+            throw new RuntimeException("Error refreshing token", re);
+        } catch (Exception e) {
+            throw new RuntimeException("Error parsing refresh response", e);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class TokenResponse {
+        public String access_token;
+        public String refresh_token;
+        public long expires_in;
+        public String token_type;
+        // other fields if you need them (sub, aud, scope, jti...)
+    }
+}
