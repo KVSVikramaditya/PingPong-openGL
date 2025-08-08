@@ -1,76 +1,87 @@
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+package com.example.immktgtranslations.service;
+
+import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpHost;
 import org.apache.http.impl.client.HttpClients;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class TransPerfectTokenService {
+// import your vault + exception
+import ms.SecureCredentialsVault;
+import ms.exceptions.SCVException;
 
-    private static final String NAMESPACE = "YOUR_NAMESPACE";
-    private static final String BASIC_KEY = "BASIC_KEY";
-    private static final String API_USERNAME = "API_USERNAME";
-    private static final String API_PASSWORD = "API_PASSWORD";
-    private static final String JWT_TOKEN_URL = "https://transperfect.example.com/oauth/token"; // your URL
+@Slf4j
+@Component // singleton by default
+public class AuthService {
 
-    // Skew so we refresh a little before the server thinks it’s expired
-    private static final Duration SKEW = Duration.ofSeconds(30);
+    private static final Duration SKEW = Duration.ofSeconds(45); // refresh a bit early
+
+    @Value("${ts.token.api.url}") private String tokenUrl;
+
+    // names of the keys in SCV (not the secrets themselves)
+    @Value("${ts.namespace}")    private String namespace;
+    @Value("${ts.basicKey}")     private String basicKeyName;
+    @Value("${ts.apiUsername}")  private String usernameKeyName;
+    @Value("${ts.apiPassword}")  private String passwordKeyName;
 
     private final SecureCredentialsVault scv;
     private final RestTemplate restTemplate;
     private final ObjectMapper mapper = new ObjectMapper();
-
     private final ReentrantLock lock = new ReentrantLock();
 
-    // Cached state
-    private volatile String accessToken;       // "Bearer ..." not necessary; return raw and add header elsewhere
+    // Cached token state (shared across threads)
+    private volatile String accessToken;
     private volatile String refreshToken;
     private volatile Instant accessTokenExpiry = Instant.EPOCH;
 
-    public TransPerfectTokenService(SecureCredentialsVault scv) {
+    // Cached secrets from SCV (lazy loaded)
+    private volatile Credentials creds;
+
+    public AuthService(SecureCredentialsVault scv) {
         this.scv = scv;
 
-        // If you need the corporate proxy:
+        // Corporate proxy; keep as-is or make it conditional via properties
         HttpHost proxy = new HttpHost("webproxy-inet.ms.com", 8080);
         var client = HttpClients.custom().setProxy(proxy).build();
         var rf = new HttpComponentsClientHttpRequestFactory(client);
         this.restTemplate = new RestTemplate(rf);
     }
 
+    /** Public entry: safe for concurrent calls. */
     public String getToken() {
-        if (isTokenValid()) {
-            return accessToken;
-        }
+        if (isTokenValid()) return accessToken;
 
         lock.lock();
         try {
-            // double-check after acquiring the lock
-            if (isTokenValid()) {
-                return accessToken;
-            }
+            if (isTokenValid()) return accessToken;
 
-            // Prefer refresh if we have it
+            ensureCredsLoaded();
+
+            // Try refresh first
             if (refreshToken != null && !refreshToken.isBlank()) {
                 try {
-                    TokenResponse tr = refreshAccessToken(refreshToken);
-                    cache(tr);
+                    cache(refresh(creds.basic, refreshToken));
                     return accessToken;
-                } catch (Exception refreshEx) {
-                    // fall through to password grant
+                } catch (Exception e) {
+                    log.warn("Token refresh failed; falling back to password grant", e);
                 }
             }
 
-            // Fresh login via password grant
-            TokenResponse tr = fetchNewAccessToken();
-            cache(tr);
+            // Password grant
+            cache(passwordGrant(creds));
             return accessToken;
 
         } finally {
@@ -78,72 +89,72 @@ public class TransPerfectTokenService {
         }
     }
 
+    // ---- internals ----
+
     private boolean isTokenValid() {
-        return accessToken != null && Instant.now().isBefore(accessTokenExpiry.minus(SKEW));
+        return accessToken != null &&
+               Instant.now().isBefore(accessTokenExpiry.minus(SKEW));
     }
 
     private void cache(TokenResponse tr) {
         this.accessToken = tr.access_token;
         this.refreshToken = tr.refresh_token;
-        Instant exp = Instant.now().plusSeconds(tr.expires_in);
-        this.accessTokenExpiry = exp;
+        this.accessTokenExpiry = Instant.now().plusSeconds(tr.expires_in);
     }
 
-    private TokenResponse fetchNewAccessToken() {
-        String basicKey = scv.tellKey(NAMESPACE, BASIC_KEY).getDataAsString();
-        String apiUsername = scv.tellKey(NAMESPACE, API_USERNAME).getDataAsString();
-        String apiPassword = scv.tellKey(NAMESPACE, API_PASSWORD).getDataAsString();
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        // NOTE: must have a space after "Basic"
-        headers.set("Authorization", "Basic " + basicKey);
-
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("grant_type", "password");
-        form.add("username", apiUsername);
-        form.add("password", apiPassword);
-
-        HttpEntity<MultiValueMap<String, String>> req = new HttpEntity<>(form, headers);
-
+    private void ensureCredsLoaded() {
+        if (creds != null) return;
+        // Only one thread should load creds at a time; call within the outer lock
         try {
-            ResponseEntity<String> resp = restTemplate.exchange(
-                    JWT_TOKEN_URL, HttpMethod.POST, req, String.class);
-            if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
-                throw new RuntimeException("Token endpoint returned " + resp.getStatusCode());
-            }
-            return mapper.readValue(resp.getBody(), TokenResponse.class);
-        } catch (RestClientException re) {
-            throw new RuntimeException("Error calling token endpoint", re);
-        } catch (Exception e) {
-            throw new RuntimeException("Error parsing token response", e);
+            String basic = scv.tellKey(namespace, basicKeyName).getDataAsString();
+            String user  = scv.tellKey(namespace, usernameKeyName).getDataAsString();
+            String pass  = scv.tellKey(namespace, passwordKeyName).getDataAsString();
+            this.creds = new Credentials(basic, user, pass);
+        } catch (SCVException e) {
+            log.error("Failed to retrieve credentials from SCV", e);
+            throw new RuntimeException("SCV lookup failed", e); // convert to unchecked
         }
     }
 
-    private TokenResponse refreshAccessToken(String refreshToken) {
-        String basicKey = scv.tellKey(NAMESPACE, BASIC_KEY).getDataAsString();
-
+    private TokenResponse passwordGrant(Credentials c) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.set("Authorization", "Basic " + basicKey);
+        headers.set("Authorization", "Basic " + c.basic); // NOTE: space after Basic
+
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "password");
+        form.add("username", c.username);
+        form.add("password", c.password);
+
+        return postAndParse(headers, form, "password grant");
+    }
+
+    private TokenResponse refresh(String basic, String refreshToken) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.set("Authorization", "Basic " + basic);
 
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "refresh_token");
         form.add("refresh_token", refreshToken);
 
-        HttpEntity<MultiValueMap<String, String>> req = new HttpEntity<>(form, headers);
+        return postAndParse(headers, form, "refresh_token grant");
+    }
 
+    private TokenResponse postAndParse(HttpHeaders headers, MultiValueMap<String, String> form, String op) {
         try {
             ResponseEntity<String> resp = restTemplate.exchange(
-                    JWT_TOKEN_URL, HttpMethod.POST, req, String.class);
+                    tokenUrl, HttpMethod.POST, new HttpEntity<>(form, headers), String.class);
+
             if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
-                throw new RuntimeException("Refresh endpoint returned " + resp.getStatusCode());
+                throw new RuntimeException("Token endpoint (" + op + ") returned " + resp.getStatusCode());
             }
             return mapper.readValue(resp.getBody(), TokenResponse.class);
+
         } catch (RestClientException re) {
-            throw new RuntimeException("Error refreshing token", re);
+            throw new RuntimeException("Error calling token endpoint (" + op + ")", re);
         } catch (Exception e) {
-            throw new RuntimeException("Error parsing refresh response", e);
+            throw new RuntimeException("Error parsing token response (" + op + ")", e);
         }
     }
 
@@ -151,8 +162,14 @@ public class TransPerfectTokenService {
     public static class TokenResponse {
         public String access_token;
         public String refresh_token;
-        public long expires_in;
+        public long   expires_in;
         public String token_type;
-        // other fields if you need them (sub, aud, scope, jti...)
+    }
+
+    private static final class Credentials {
+        final String basic, username, password;
+        Credentials(String basic, String username, String password) {
+            this.basic = basic; this.username = username; this.password = password;
+        }
     }
 }
