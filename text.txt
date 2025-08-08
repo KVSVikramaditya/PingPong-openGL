@@ -1,175 +1,126 @@
-package com.example.immktgtranslations.service;
+package com.example.immktgtranslations.health;
 
-import lombok.extern.slf4j.Slf4j;
-import org.apache.http.HttpHost;
-import org.apache.http.impl.client.HttpClients;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.stereotype.Component;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
-
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.concurrent.locks.ReentrantLock;
-
-// import your vault + exception
-import ms.SecureCredentialsVault;
 import ms.exceptions.SCVException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.actuate.health.Health;
+import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-@Slf4j
-@Component // singleton by default
-public class AuthService {
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.util.HashMap;
+import java.util.Map;
 
-    private static final Duration SKEW = Duration.ofSeconds(45); // refresh a bit early
+@Component
+@RestController
+public class TranslationsHealthIndicator implements HealthIndicator {
 
-    @Value("${ts.token.api.url}") private String tokenUrl;
+    private static final int DB_TIMEOUT_SECONDS = 2;
 
-    // names of the keys in SCV (not the secrets themselves)
-    @Value("${ts.namespace}")    private String namespace;
-    @Value("${ts.basicKey}")     private String basicKeyName;
-    @Value("${ts.apiUsername}")  private String usernameKeyName;
-    @Value("${ts.apiPassword}")  private String passwordKeyName;
+    @Autowired
+    private DataSource dataSource;
 
-    private final SecureCredentialsVault scv;
-    private final RestTemplate restTemplate;
-    private final ObjectMapper mapper = new ObjectMapper();
-    private final ReentrantLock lock = new ReentrantLock();
+    @Autowired
+    private AuthService authService;
 
-    // Cached token state (shared across threads)
-    private volatile String accessToken;
-    private volatile String refreshToken;
-    private volatile Instant accessTokenExpiry = Instant.EPOCH;
-
-    // Cached secrets from SCV (lazy loaded)
-    private volatile Credentials creds;
-
-    public AuthService(SecureCredentialsVault scv) {
-        this.scv = scv;
-
-        // Corporate proxy; keep as-is or make it conditional via properties
-        HttpHost proxy = new HttpHost("webproxy-inet.ms.com", 8080);
-        var client = HttpClients.custom().setProxy(proxy).build();
-        var rf = new HttpComponentsClientHttpRequestFactory(client);
-        this.restTemplate = new RestTemplate(rf);
+    @Override
+    public Health health() {
+        CheckResult r = runChecks();
+        Health.Builder b = (r.allUp()) ? Health.up() : Health.down();
+        b.withDetail("Database", r.dbDetail)
+         .withDetail("TransPerfect service", r.oauthDetail)
+         .withDetail("scv", r.scvDetail);
+        return b.build();
     }
 
-    /** Public entry: safe for concurrent calls. */
-    public String getToken() {
-        if (isTokenValid()) return accessToken;
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> healthEndpoint() {
+        CheckResult r = runChecks();
 
-        lock.lock();
-        try {
-            if (isTokenValid()) return accessToken;
+        HttpStatus status;
+        if (!r.dbUp || r.scvFailed) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;   // 500
+        } else if (!r.oauthUp) {
+            status = HttpStatus.SERVICE_UNAVAILABLE;     // 503
+        } else {
+            status = HttpStatus.OK;                      // 200
+        }
 
-            ensureCredsLoaded();
+        Map<String, Object> body = new HashMap<>();
+        body.put("status", r.allUp() ? "UP" : "DOWN");
 
-            // Try refresh first
-            if (refreshToken != null && !refreshToken.isBlank()) {
-                try {
-                    cache(refresh(creds.basic, refreshToken));
-                    return accessToken;
-                } catch (Exception e) {
-                    log.warn("Token refresh failed; falling back to password grant", e);
-                }
+        Map<String, Object> details = new HashMap<>();
+        details.put("Database", r.dbDetail);                 // "Connection is successful" / "Connection failed"
+        details.put("TransPerfect service", r.oauthDetail);  // "Service is UP" / "Service is down"
+        details.put("scv", r.scvDetail);                     // "access successful" / "access failed"
+        body.put("details", details);
+
+        return new ResponseEntity<>(body, status);
+    }
+
+    private CheckResult runChecks() {
+        CheckResult r = new CheckResult();
+
+        // DB check
+        try (Connection conn = dataSource.getConnection()) {
+            if (conn != null && conn.isValid(DB_TIMEOUT_SECONDS)) {
+                r.dbUp = true;
+                r.dbDetail = "Connection is successful";
+            } else {
+                r.dbUp = false;
+                r.dbDetail = "Connection failed";
             }
-
-            // Password grant
-            cache(passwordGrant(creds));
-            return accessToken;
-
-        } finally {
-            lock.unlock();
+        } catch (Exception ignored) {
+            r.dbUp = false;
+            r.dbDetail = "Connection failed";
         }
-    }
 
-    // ---- internals ----
-
-    private boolean isTokenValid() {
-        return accessToken != null &&
-               Instant.now().isBefore(accessTokenExpiry.minus(SKEW));
-    }
-
-    private void cache(TokenResponse tr) {
-        this.accessToken = tr.access_token;
-        this.refreshToken = tr.refresh_token;
-        this.accessTokenExpiry = Instant.now().plusSeconds(tr.expires_in);
-    }
-
-    private void ensureCredsLoaded() {
-        if (creds != null) return;
-        // Only one thread should load creds at a time; call within the outer lock
+        // OAuth + SCV check
         try {
-            String basic = scv.tellKey(namespace, basicKeyName).getDataAsString();
-            String user  = scv.tellKey(namespace, usernameKeyName).getDataAsString();
-            String pass  = scv.tellKey(namespace, passwordKeyName).getDataAsString();
-            this.creds = new Credentials(basic, user, pass);
-        } catch (SCVException e) {
-            log.error("Failed to retrieve credentials from SCV", e);
-            throw new RuntimeException("SCV lookup failed", e); // convert to unchecked
-        }
-    }
-
-    private TokenResponse passwordGrant(Credentials c) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.set("Authorization", "Basic " + c.basic); // NOTE: space after Basic
-
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("grant_type", "password");
-        form.add("username", c.username);
-        form.add("password", c.password);
-
-        return postAndParse(headers, form, "password grant");
-    }
-
-    private TokenResponse refresh(String basic, String refreshToken) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.set("Authorization", "Basic " + basic);
-
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("grant_type", "refresh_token");
-        form.add("refresh_token", refreshToken);
-
-        return postAndParse(headers, form, "refresh_token grant");
-    }
-
-    private TokenResponse postAndParse(HttpHeaders headers, MultiValueMap<String, String> form, String op) {
-        try {
-            ResponseEntity<String> resp = restTemplate.exchange(
-                    tokenUrl, HttpMethod.POST, new HttpEntity<>(form, headers), String.class);
-
-            if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
-                throw new RuntimeException("Token endpoint (" + op + ") returned " + resp.getStatusCode());
+            String token = authService.getToken();
+            if (token != null && !token.isBlank()) {
+                r.oauthUp = true;
+                r.oauthDetail = "Service is UP";
+                r.scvDetail = "access successful"; // SCV implicitly fine if we got a token
+            } else {
+                r.oauthUp = false;
+                r.oauthDetail = "Service is down";
+                if (r.scvDetail == null) r.scvDetail = "access successful";
             }
-            return mapper.readValue(resp.getBody(), TokenResponse.class);
+        } catch (SCVException scv) {
+            r.oauthUp = false;
+            r.oauthDetail = "Service is down";
+            r.scvFailed = true;
+            r.scvDetail = "access failed";
+        } catch (Exception ignored) {
+            r.oauthUp = false;
+            r.oauthDetail = "Service is down";
+            if (r.scvDetail == null) r.scvDetail = "access successful";
+        }
 
-        } catch (RestClientException re) {
-            throw new RuntimeException("Error calling token endpoint (" + op + ")", re);
-        } catch (Exception e) {
-            throw new RuntimeException("Error parsing token response (" + op + ")", e);
+        if (r.scvDetail == null) r.scvDetail = "access successful";
+        return r;
+    }
+
+    private static class CheckResult {
+        boolean dbUp = false;
+        boolean oauthUp = false;
+        boolean scvFailed = false;
+
+        String dbDetail = "Connection failed";
+        String oauthDetail = "Service is down";
+        String scvDetail = null;
+
+        boolean allUp() {
+            return dbUp && oauthUp && !scvFailed;
         }
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class TokenResponse {
-        public String access_token;
-        public String refresh_token;
-        public long   expires_in;
-        public String token_type;
-    }
-
-    private static final class Credentials {
-        final String basic, username, password;
-        Credentials(String basic, String username, String password) {
-            this.basic = basic; this.username = username; this.password = password;
-        }
+    public interface AuthService {
+        String getToken();
     }
 }
