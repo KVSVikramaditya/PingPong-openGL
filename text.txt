@@ -1,22 +1,50 @@
-package com.example.immktgtranslations.health;
+// src/main/java/com/example/immktgtranslations/controller/HealthController.java
+package com.example.immktgtranslations.controller;
+
+import com.example.immktgtranslations.service.TranslationsHealthIndicator;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.actuate.health.Health;
+import org.springframework.boot.actuate.health.Status;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class HealthController {
+
+    private final TranslationsHealthIndicator healthIndicator;
+
+    @Autowired
+    public HealthController(TranslationsHealthIndicator healthIndicator) {
+        this.healthIndicator = healthIndicator;
+    }
+
+    @GetMapping("/health")
+    public ResponseEntity<Health> getHealth() {
+        Health health = healthIndicator.health();
+        HttpStatus status = Status.UP.equals(health.getStatus())
+                ? HttpStatus.OK
+                : HttpStatus.INTERNAL_SERVER_ERROR;
+        return ResponseEntity.status(status).body(health);
+    }
+}
+
+
+
+// src/main/java/com/example/immktgtranslations/service/TranslationsHealthIndicator.java
+package com.example.immktgtranslations.service;
 
 import ms.exceptions.SCVException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.util.HashMap;
-import java.util.Map;
 
 @Component
-@RestController
 public class TranslationsHealthIndicator implements HealthIndicator {
 
     private static final int DB_TIMEOUT_SECONDS = 2;
@@ -30,36 +58,12 @@ public class TranslationsHealthIndicator implements HealthIndicator {
     @Override
     public Health health() {
         CheckResult r = runChecks();
-        Health.Builder b = (r.allUp()) ? Health.up() : Health.down();
-        b.withDetail("Database", r.dbDetail)
-         .withDetail("TransPerfect service", r.oauthDetail)
-         .withDetail("scv", r.scvDetail);
-        return b.build();
-    }
+        Health.Builder b = r.allUp() ? Health.up() : Health.down();
 
-    @GetMapping("/health")
-    public ResponseEntity<Map<String, Object>> healthEndpoint() {
-        CheckResult r = runChecks();
-
-        HttpStatus status;
-        if (!r.dbUp || r.scvFailed) {
-            status = HttpStatus.INTERNAL_SERVER_ERROR;   // 500
-        } else if (!r.oauthUp) {
-            status = HttpStatus.SERVICE_UNAVAILABLE;     // 503
-        } else {
-            status = HttpStatus.OK;                      // 200
-        }
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("status", r.allUp() ? "UP" : "DOWN");
-
-        Map<String, Object> details = new HashMap<>();
-        details.put("Database", r.dbDetail);                 // "Connection is successful" / "Connection failed"
-        details.put("TransPerfect service", r.oauthDetail);  // "Service is UP" / "Service is down"
-        details.put("scv", r.scvDetail);                     // "access successful" / "access failed"
-        body.put("details", details);
-
-        return new ResponseEntity<>(body, status);
+        return b.withDetail("Database", r.dbDetail)
+                .withDetail("TransPerfect service", r.oauthDetail)
+                .withDetail("scv", r.scvDetail)
+                .build();
     }
 
     private CheckResult runChecks() {
@@ -79,30 +83,29 @@ public class TranslationsHealthIndicator implements HealthIndicator {
             r.dbDetail = "Connection failed";
         }
 
-        // OAuth + SCV check
+        // OAuth/TransPerfect + SCV check
         try {
             String token = authService.getToken();
             if (token != null && !token.isBlank()) {
                 r.oauthUp = true;
                 r.oauthDetail = "Service is UP";
-                r.scvDetail = "access successful"; // SCV implicitly fine if we got a token
+                if (r.scvDetail == null) r.scvDetail = "access successful";
             } else {
                 r.oauthUp = false;
                 r.oauthDetail = "Service is down";
                 if (r.scvDetail == null) r.scvDetail = "access successful";
             }
-        } catch (SCVException scv) {
+        } catch (Exception e) {
             r.oauthUp = false;
             r.oauthDetail = "Service is down";
-            r.scvFailed = true;
-            r.scvDetail = "access failed";
-        } catch (Exception ignored) {
-            r.oauthUp = false;
-            r.oauthDetail = "Service is down";
-            if (r.scvDetail == null) r.scvDetail = "access successful";
+            if (e instanceof SCVException) {
+                r.scvFailed = true;
+                r.scvDetail = "access failed";
+            } else {
+                if (r.scvDetail == null) r.scvDetail = "access successful";
+            }
         }
 
-        if (r.scvDetail == null) r.scvDetail = "access successful";
         return r;
     }
 
@@ -115,12 +118,6 @@ public class TranslationsHealthIndicator implements HealthIndicator {
         String oauthDetail = "Service is down";
         String scvDetail = null;
 
-        boolean allUp() {
-            return dbUp && oauthUp && !scvFailed;
-        }
-    }
-
-    public interface AuthService {
-        String getToken();
+        boolean allUp() { return dbUp && oauthUp && !scvFailed; }
     }
 }
