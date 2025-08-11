@@ -1,4 +1,3 @@
-// src/main/java/com/example/immktgtranslations/controller/HealthController.java
 package com.example.immktgtranslations.controller;
 
 import com.example.immktgtranslations.service.TranslationsHealthIndicator;
@@ -9,6 +8,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
 
 @RestController
 public class HealthController {
@@ -23,12 +24,29 @@ public class HealthController {
     @GetMapping("/health")
     public ResponseEntity<Health> getHealth() {
         Health health = healthIndicator.health();
-        HttpStatus status = Status.UP.equals(health.getStatus())
-                ? HttpStatus.OK
-                : HttpStatus.INTERNAL_SERVER_ERROR;
+
+        // Extract details
+        Map<String, Object> details = health.getDetails();
+        String dbStatus = (String) details.get("Database");
+        String scvStatus = (String) details.get("scv");
+
+        HttpStatus status;
+
+        if (Status.UP.equals(health.getStatus())) {
+            status = HttpStatus.OK; // 200
+        }
+        else if ("Connection failed".equalsIgnoreCase(dbStatus)
+                || "access failed".equalsIgnoreCase(scvStatus)) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR; // 500
+        }
+        else {
+            status = HttpStatus.SERVICE_UNAVAILABLE; // 503
+        }
+
         return ResponseEntity.status(status).body(health);
     }
 }
+
 
 
 
