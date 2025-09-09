@@ -1,0 +1,34 @@
+Yes, the diagram is a good high-level illustration of the key server interactions, especially for a server-to-server (Client Credentials) flow. It correctly shows the three main roles and how tokens are requested and used.
+
+For your presentation, I have corrected the minor spelling errors and filled in the information to explain both the terminology and the flow shown in the diagram.
+
+Slide: The Core OIDC Flow Explained
+[Your Diagram Here]
+
+Basic Terminology
+Client Server: The application that needs to access protected data or a service (e.g., the ExpensePro App).
+
+Resource Server: The API or service that protects and provides the data (e.g., the HR Profile API).
+
+Authorization Server: The central, trusted service that handles authentication and issues tokens (e.g., PingFederate).
+
+Access Token: A secure token that grants the Client permission to access the Resource Server. It acts like a temporary key.
+
+Client ID: A public, unique username for the application, issued upon registration.
+
+Client Secret: A confidential password for the application, stored in a Secured Vault and used to prove its identity.
+
+Scopes: Defines the specific permissions the client is requesting (e.g., read_only access).
+
+Explaining the Flow in the Diagram
+This diagram illustrates how a Client Server securely gets permission to access a Resource Server.
+
+Authentication Request: The Client Server authenticates itself to the Authorization Server by sending its Client ID and Client Secret. It is essentially asking, "Can I please have a key to access the service?"
+
+Issuing Tokens: The Authorization Server validates the Client's credentials. If they are correct, it issues an Access Token (and an ID Token if a user is involved) back to the Client.
+
+Making a Protected Request: The Client Server now makes its request to the Resource Server. It includes the newly acquired Access Token in the request header to prove it has permission.
+
+Validating the Token: The Resource Server receives the request but doesn't trust the token blindly. It performs a crucial security check by asking the Authorization Server to validate the Access Token, confirming it is legitimate and has not expired.
+
+Granting Access to the Service: Once the token is validated, the Resource Server processes the request and returns the protected data or service back to the Client.
