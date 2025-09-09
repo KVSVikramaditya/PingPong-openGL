@@ -1,14 +1,21 @@
-String batchName = batchFileMap.entrySet()
-    .stream()
-    .filter(entry -> entry.getValue()
-        .stream()
-        .anyMatch(metadata ->
-            metadata.getFilename().equals(target.getDocumentName()) &&
-            Arrays.stream(metadata.getTargetLanguage().split(","))
-                .map(String::trim)
-                .anyMatch(lang -> lang.equalsIgnoreCase(target.getTargetLanguage())) 
-        )
-    )
-    .findFirst()
-    .map(Map.Entry::getKey)
-    .orElse("Unknown Batch");
+To register your application for OIDC, you use the firm's self-service registration portal, which is available for each environment (Dev, QA, Prod).
+
+The process is as follows:
+
+Navigate to the OIDC Registration Page: Access the portal for the specific environment you are working in (e.g., the "dev" instance of PingFederate).
+
+Create a New Registration: Using the provided API interface (a Swagger UI), you will submit a request to create a new client.
+
+Provide Application Details: You will need to define how your application will operate by specifying key information, including:
+
+Grant Type: authorization_code for user logins or client_credentials for server-to-server communication.
+
+Scopes: The permissions your application needs (e.g., openid, profile).
+
+Redirect URI: The secure URL the user will be sent back to after logging in.
+
+Receive Your Credentials: Once submitted, the system automatically:
+
+Generates a unique Client ID for your application.
+
+Creates a corresponding Client Secret (or private key) and stores it securely in the Secured Credential Vault (SCV), ready for your application to use.
