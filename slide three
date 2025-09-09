@@ -1,7 +1,59 @@
-1. Setup: During registration, a Public/Private Key pair is created for the application. The sensitive Private Key is stored in the SCV (Secured Credential Vault).
+ow to Achieve OIDC in a Java Application
+Achieving OIDC in Java is made simple by using Spring Security, which is the firm's recommended framework. Our internal Platform Engineering team provides custom helper libraries that handle most of the complexity for you.
 
-2. Request: The client creates a JWT asserting its identity (Client ID) and signs it using the Private Key fetched from the SCV.
+Here’s the typical developer workflow:
 
-3. Verification: The Authorization Server receives the request and uses the client's corresponding Public Key to validate the JWT's signature.
+1. Add the Dependencies:
+First, you add the necessary Morgan Stanley Spring Boot starters to your project's build file. These starters include both Spring Security and our custom libraries.
 
-4. Issuance: Once the signature is verified, the server issues an Access Token, which the client can now use to access resources.
+ms-spring-boot-starter-oauth2-client (for web applications logging in users)
+
+ms-spring-boot-starter-oauth2-resource-server (for APIs that need to validate tokens)
+
+2. Configure Your Application:
+The core of the integration happens in your application.yml file. You simply provide the details you received during registration. Spring Security uses these properties to automatically configure the entire OIDC flow.
+
+Example application.yml Configuration:
+
+YAML
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          # Your application's unique registration name
+          my-app-oidc:
+            provider: pingfederate-dev
+            client-id: "your-client-id-from-the-portal"
+            # The authentication method for your client (e.g., private_key_jwt)
+            client-authentication-method: "private_key_jwt"
+            authorization-grant-type: "authorization_code"
+            scope: "openid, profile, email"
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Standard Spring pattern
+        provider:
+          # Configuration for our Authorization Server
+          pingfederate-dev:
+            # This single URL allows Spring to discover all other endpoints
+            issuer-uri: "https://our-firm-authorization-server.com/dev"
+3. Let the Framework Handle the Magic:
+With this configuration in place, Spring Security and our libraries automatically handle:
+
+Redirecting unauthenticated users to the firm's login page.
+
+Managing the secure exchange of the authorization code for an ID Token and Access Token.
+
+Creating a user session and making the authenticated user's details available to your application.
+
+4. Access User Information in Your Code:
+Once a user is logged in, you can easily access their identity in your controllers by simply adding the authenticated Principal or OidcUser object as a method parameter.
+
+Java
+
+@GetMapping("/profile")
+public String userProfile(@AuthenticationPrincipal OidcUser principal) {
+    // You can now get the user's name, email, etc. from the principal
+    String userEmail = principal.getEmail();
+    return "Welcome, " + principal.getFullName();
+}
+In summary, you declare your dependencies, provide your registration details in a configuration file, and the framework takes care of the rest, allowing you to focus on your application's business logic.
