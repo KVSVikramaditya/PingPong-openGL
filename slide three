@@ -1,59 +1,43 @@
-ow to Achieve OIDC in a Java Application
-Achieving OIDC in Java is made simple by using Spring Security, which is the firm's recommended framework. Our internal Platform Engineering team provides custom helper libraries that handle most of the complexity for you.
-
-Here’s the typical developer workflow:
-
-1. Add the Dependencies:
-First, you add the necessary Morgan Stanley Spring Boot starters to your project's build file. These starters include both Spring Security and our custom libraries.
-
-ms-spring-boot-starter-oauth2-client (for web applications logging in users)
-
-ms-spring-boot-starter-oauth2-resource-server (for APIs that need to validate tokens)
-
-2. Configure Your Application:
-The core of the integration happens in your application.yml file. You simply provide the details you received during registration. Spring Security uses these properties to automatically configure the entire OIDC flow.
-
-Example application.yml Configuration:
-
-YAML
-
-spring:
-  security:
-    oauth2:
-      client:
-        registration:
-          # Your application's unique registration name
-          my-app-oidc:
-            provider: pingfederate-dev
-            client-id: "your-client-id-from-the-portal"
-            # The authentication method for your client (e.g., private_key_jwt)
-            client-authentication-method: "private_key_jwt"
-            authorization-grant-type: "authorization_code"
-            scope: "openid, profile, email"
-            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Standard Spring pattern
-        provider:
-          # Configuration for our Authorization Server
-          pingfederate-dev:
-            # This single URL allows Spring to discover all other endpoints
-            issuer-uri: "https://our-firm-authorization-server.com/dev"
-3. Let the Framework Handle the Magic:
-With this configuration in place, Spring Security and our libraries automatically handle:
-
-Redirecting unauthenticated users to the firm's login page.
-
-Managing the secure exchange of the authorization code for an ID Token and Access Token.
-
-Creating a user session and making the authenticated user's details available to your application.
-
-4. Access User Information in Your Code:
-Once a user is logged in, you can easily access their identity in your controllers by simply adding the authenticated Principal or OidcUser object as a method parameter.
-
-Java
-
-@GetMapping("/profile")
-public String userProfile(@AuthenticationPrincipal OidcUser principal) {
-    // You can now get the user's name, email, etc. from the principal
-    String userEmail = principal.getEmail();
-    return "Welcome, " + principal.getFullName();
-}
-In summary, you declare your dependencies, provide your registration details in a configuration file, and the framework takes care of the rest, allowing you to focus on your application's business logic.
+Of course. Here is a complete, polished script for your presentation, combining the key points from your PowerPoint slides and your recorded explanation. You can read this aloud as you present each slide.
+(Title Slide: Modernizing Authentication: A Developer's Guide to OIDC)
+"Hi everyone, and thank you for joining today. I'm going to present the firm's new, modern approach to application security: OpenID Connect, or OIDC. We'll cover what it is, how it works, and how you can easily implement it in your Java applications."
+[Transition to next slide]
+(Slide 2: OIDC Flow)
+"So, what is OIDC? At a high level, it's an authentication protocol used between systems so that one system can access another securely. It involves three main players:
+• First, the Client Server, which is your application that's trying to access a service.
+• That service is protected by the Resource Server.
+• And finally, the Authorization Server, which is a central service that both parties mutually trust to authenticate requests. For us, this is PingFederate.
+The flow begins with both the Client and Resource servers registering with the Authorization Server. When the Client wants to access the Resource Server, it first sends a request to the Authorization Server with its Client ID and Client Secret. The Authorization Server validates this and returns an Access Token. The Client then uses this token to make a request to the Resource Server. The Resource Server validates that token with the Authorization Server one more time and, if valid, grants access to the service."
+[Transition to next slide]
+(Slide 3: OIDC Registration Process)
+"To implement OIDC, both client and server applications need to be registered. We have a self-service portal for this.
+You'll navigate to the OIDC registration page for the specific environment you're in, like 'dev'. For the dev environment, there's a UI where you can create a registration, which runs a cURL command in the background. For other environments like QA or Prod, you'll need to execute these commands on a UNIX box, logging in as the respective PROD ID.
+During registration, you'll provide key information:
+• Grant Type: You'll choose between authorization_code for user logins via a webpage, and client_credentials for server-to-server communication.
+• Scopes: These define the permissions your app needs. For example, openid indicates that you are requesting user ID information.
+• Redirect URI: This is a critical security feature for the authorization_code flow. After a user authenticates, the Authorization Server will only send them back to this pre-approved URL, preventing the authorization code from being sent to a malicious site.
+• Finally, a corresponding Client Secret or private key is created and stored securely in the Secured Credential Vault (SCV), ready for your application to use."
+[Transition to next slide]
+(Slide 4: How a Client securely gets the Token)
+"So, how does an application get its token? This process is highly secure and relies on a public/private key pair.
+• First is the Setup: During that one-time registration, a Public/Private Key pair is created for your application. The sensitive Private Key is stored in the SCV.
+• Next, the Request: When your application needs a token, it creates a JWT, or JSON Web Token, asserting its own identity with its Client ID. It then signs this JWT using its Private Key, which it fetches securely from the SCV.
+• Then, Verification: The Client sends this signed JWT to the Authorization Server. The Authorization Server uses the client's corresponding Public Key to validate the JWT's signature.
+• Finally, Issuance: Once the signature is verified and the client's identity is confirmed, the Authorization Server issues an Access Token, which the client can now use to access resources."
+[Transition to next slide]
+(Slide 5: OIDC in Java Using Spring)
+"The great news is that implementing OIDC in Java has been made really simple by using the firm's in-built libraries and the Spring Security framework.
+The core of the integration happens right in your application.yml or application.properties file. You don’t need to handle the complex OIDC flow yourself; you simply need to provide your registration details, like the Registration ID.
+Our JPE Spring Security extensions provide easy configuration for the PingFederate servers. The library is able to interact with the SCV; using the registration ID you provide, it can fetch the correct Client ID and Private Key. It then uses these to get the token, puts it into the request header, and sends it to the resource server. On the resource server side, Spring Security intercepts the request, validates the token, and grants access."
+[Transition to next slide]
+(Slide 6: Demo)
+"Now that we've covered the concepts, let's jump into a quick demo to see how this all looks in the code."
+[Begin Demo - You can use the following script to narrate your code walkthrough]
+"First, let's look at the registration page. When you navigate to the OIDC portal, you can see the different environments available. I’ve already created registrations for a demo client and resource. If we look at the JSON request for the resource server, you can see we've defined the openid scope, the SCV readers, and the grant type. We also set API=true, which distinguishes this registration as a resource server, exposing its Client ID so other services can call it.
+Now, looking at the code, here is our Resource Server. In the application.properties file, we've only had to provide the ms-server-registration-id. That's it. In the SecurityConfig.java class, we simply configure a filter chain to ensure all requests are authenticated and apply our OAuth2 security settings.
+On the client side, it's very similar. In its application.properties, we provide the client's registration ID and also tell it the registration ID of the resource server it needs to call.
+When I run the client, it will use these configurations to automatically get a token from the Authorization Server and make a secure call to our resource server. The resource server will validate the token and return a successful response."
+[End of Demo, transition back to slides]
+(Final Slide: Q&A / Summary)
+"To summarize, our new OIDC framework simplifies development, enhances security, and modernizes our applications. By using Spring Security and our internal helper libraries, you can secure your applications with minimal configuration.
+Thank you. Are there any questions?"
