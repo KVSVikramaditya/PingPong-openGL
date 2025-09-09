@@ -1,32 +1,7 @@
-Slide 3: How a Client Gets an Access Token (The Client Credentials Flow)
-Before a Client Server can access a Resource Server, it must first prove its own identity to the Authorization Server to get a token. We use a very secure method that relies on a public/private key pair instead of a simple shared secret.
+1. Setup: During registration, a Public/Private Key pair is created for the application. The sensitive Private Key is stored in the SCV (Secured Credential Vault).
 
-Step 1: One-Time Registration and Key Setup
+2. Request: The client creates a JWT asserting its identity (Client ID) and signs it using the Private Key fetched from the SCV.
 
-When the application is registered, a Public/Private Key pair is generated for it.
+3. Verification: The Authorization Server receives the request and uses the client's corresponding Public Key to validate the JWT's signature.
 
-The Public Key is stored by the Authorization Server alongside the Client ID.
-
-The highly sensitive Private Key is stored in the firm's SCV (Secured Credential Vault), never in the application's code.
-
-Step 2: The Client Creates and Signs a JWT
-
-To request a token using the Client Credentials grant, the Client Server first creates its own JWT (JSON Web Token).
-
-This JWT contains claims proving its identity, such as its iss (issuer) and sub (subject), which are both set to its Client ID.
-
-Crucially, the client then signs this JWT using its Private Key, which it retrieves securely from the SCV. This digital signature proves it is who it claims to be.
-
-Step 3: The Authorization Server Verifies the Signature
-
-The Client sends this signed JWT to the Authorization Server.
-
-The server looks up the Public Key associated with the Client ID from the JWT.
-
-It uses the Public Key to verify the JWT's signature. If the verification succeeds, it proves the request came from the legitimate application and has not been tampered with.
-
-Step 4: The Access Token is Issued
-
-Once the client's identity is successfully verified, the Authorization Server issues a new Access Token.
-
-The Client Server can now use this token to make secure, authorized calls to the Resource Server.
+4. Issuance: Once the signature is verified, the server issues an Access Token, which the client can now use to access resources.
