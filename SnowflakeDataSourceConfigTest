@@ -1,16 +1,94 @@
-@Configuration
-public class WebMvcConfiguration implements WebMvcConfigurer {
+Of course. Here is the updated documentation, rewritten in a paragraph-based format with the additional details and validation rules you provided.
 
-    private final RateLimitingInterceptor rateLimitingInterceptor;
+-----
 
-    public WebMvcConfiguration(RateLimitingInterceptor rateLimitingInterceptor) {
-        this.rateLimitingInterceptor = rateLimitingInterceptor;
+## **API Documentation: Create Submission Request**
+
+### **Overview**
+
+This document outlines the structure and attributes of the JSON payload for the **Create Submission** endpoint. This endpoint allows a client to submit one or more files to the Translation Service for processing from a source language into one or more target languages. A single request can contain multiple files by including multiple objects in the `items` array.
+
+### **Request Validation**
+
+The translation project's API validates incoming requests to ensure they meet specific criteria. If a request fails validation, the API will respond with a `400 Bad Request` error. A key validation rule is that the `dueDate` must always be a time in the future.
+
+### **Example Request Body**
+
+```json
+{
+  "submissionName": "Test submission",
+  "dueDate": "1760054400000",
+  "priority": "161",
+  "projectId": "29",
+  "userId": "vikramad",
+  "items": [
+    {
+      "targetLanguages": "zh-HK,zh-TW",
+      "sourceFileName": "Testi.json",
+      "data": "encoded data",
+      "fileFormatName": "PD-REST-JSON",
+      "workflowId": "251",
+      "sourceLanguage": "en-GB"
     }
-
-    @Override
-    public void addInterceptors(InterceptorRegistry registry) {
-        // other interceptors...
-        registry.addInterceptor(rateLimitingInterceptor)
-                .addPathPatterns("/save**", "/submit**"); // adjust as needed
-    }
+  ]
 }
+```
+
+-----
+
+### **Top-Level Attribute Definitions**
+
+#### `submissionName`
+
+This is a **required** string that serves as the display name for the submission within the translation project's UI. Clients can use their own internal naming conventions for this field. The maximum length is 150 characters.
+
+#### `dueDate`
+
+This is a **required** string representing the timestamp for when the translation job is due. The format must be in Epoch milliseconds (a 13-digit number). As part of the request validation, this value must be set to a future time. To ensure the request is accepted, it is recommended to set this value to at least a day in the future (e.g., tomorrow's date and time).
+
+#### `priority`
+
+This is an **optional** string that defines the submission's priority level using a specific number. There are three priority levels: Slow, Medium, and High. The exact numbers corresponding to these levels will be provided to clients during the onboarding process. If the `priority` attribute is omitted from the request, the submission will automatically be assigned the standard (Medium) priority.
+
+#### `projectId`
+
+This is a **required** string that serves as the unique identifier for the target translation project and environment. This ID ensures that the submission is routed to the correct project for processing. The correct `projectId` to use will be shared with you.
+
+#### `userId`
+
+This is a **required** string that identifies the user or system initiating the request. For development and testing purposes, such as when using the Swagger UI, a pre-configured user ID can be used to test the endpoint.
+
+#### `items`
+
+This is a **required** array that contains one or more objects, where each object holds the metadata and content for a single file to be translated.
+
+-----
+
+### **`items` Object Attribute Definitions**
+
+#### `data`
+
+This is a **required** string containing the full content of the source file. The file content must be encoded (e.g., using Base64) before being placed into this field.
+
+#### `sourceLanguage`
+
+This is a **required** string that specifies the language of the original file being submitted. It should be a standard language code, such as `en-GB` for British English.
+
+#### `targetLanguages`
+
+This is a **required** string that specifies the desired output languages for the translation. You can submit a request for multiple target languages at once by providing them in a single string, separated by either a comma (`,`) or a pipe (`|`). The choice of separator has important implications for the review process:
+
+  * **Comma-separated (`,`)**: Using a comma (e.g., `"zh-HK,zh-TW"`) groups the target languages. This ensures they share a single submission ID, and the resulting translated files will be reviewed by the same person from the TransPerfect team.
+  * **Pipe-separated (`|`)**: Using a pipe (e.g., `"zh-HK|zh-TW"`) treats each target language independently. This may result in different submission IDs for each language, meaning the translated files could be reviewed by different people.
+
+#### `sourceFileName`
+
+This is a **required** string that defines the original name of the file you are sending for translation (e.g., `"Test1.json"`).
+
+#### `fileFormatName`
+
+This is an **optional** string that explicitly identifies the format of the source file. If this attribute is not included in the request, the system will attempt to automatically detect the file format.
+
+#### `workflowId`
+
+This is a **required** string that specifies which processing workflow to use for the translation. Different workflows exist for different environments, such as Staging, Pseudo, and Production. For testing purposes, you can use the `workflowId` **`251`**.
