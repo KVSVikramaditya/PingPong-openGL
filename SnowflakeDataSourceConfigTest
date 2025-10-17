@@ -1,93 +1,45 @@
-Of course. Based on your detailed explanation, here is a complete documentation draft for the API response.
+Of course. Here is the API documentation for the download endpoint based on your description.
 
 -----
 
-## **API Documentation: Submission Response**
+## **API Documentation: Download Translated Files**
 
-### **Overview**
+### **Overview 📥**
 
-This document outlines the structure and attributes of the JSON payload returned after a successful submission request. It's important to understand the relationship between a single request and the response you receive.
+This endpoint is used to download the content of one or more translated files. After you have identified which files are ready by using the **Get Submission Status** endpoint, you can pass their `targetId`s to this endpoint to retrieve the actual file data.
 
-When you send a submission request for a single source file with multiple target languages (e.g., translating one English file into German, French, and Spanish), the API will return an **array of response objects**. Each object in the array corresponds to a single target language and has its own unique `targetId`. Therefore, for a single file translated into three languages, you will receive a response containing three of the objects detailed below.
+### **Request Body Structure**
 
-### **Example Response Object**
-
-The following is an example of a single object within the response array.
+The request requires a JSON object containing your `userId` and a list of `targetId`s for the files you wish to download.
 
 ```json
 {
-  "submissionDate": "2025-06-17T10:00:21-0400",
-  "status": "READY",
-  "jobId": 26134,
-  "targetId": 107896,
-  "dueDate": 1767178799000,
-  "submissionId": 19563,
-  "documentId": 97431,
-  "sourceFileName": "OF-EQ-1209.json",
-  "targetLanguage": "de-DE",
-  "FileFormatName": "PD-REST-JSON",
-  "sourceLanguage": "en-US",
-  "targetFileName": "OF-EQ-1209_de-DE",
-  "lastModified": "2025-06-17T10:00:21-0400",
-  "batchName": "Commentaries-Apr25-Batch-1_en-US_de-DE",
-  "submissionName": "Commentaries-Apr25-Batch-1_de-DE"
+  "userId": "vikramad",
+  "targetIds": [
+    "22621",
+    "22622"
+  ]
 }
 ```
 
 -----
 
-### **Response Attribute Definitions**
+### **Attribute Definitions**
 
-#### `submissionDate`
+#### `userId`
 
-This is an ISO 8601 formatted timestamp indicating the exact date and time when the request for this specific target translation was created and stored in the database.
+This is a **required** string that identifies you as the client. It ensures you only receive files associated with your account.
 
-#### `status`
+#### `targetIds`
 
-This string indicates the current state of the translation job for this specific target file. The status will be updated as the file moves through the translation workflow. Possible values include:
+This is a **required** array of strings, where each string is a `targetId` corresponding to a translated file you want to download.
 
-  * `READY`
-  * `IN_PROCESS`
-  * `PROCESSED_AND_DELIVERED`
-  * `CANCELLED`
-  * `STOPPED`
+**Constraint**: You can include a maximum of **25** `targetId`s in a single request. If you need to download more than 25 files, you must send multiple requests.
 
-#### `targetId`
+### **Response**
 
-This is a unique integer that serves as the primary identifier for a single translated file. Since each language translation is tracked individually, every target language in your request will generate a response object with a unique `targetId`.
+A successful response will contain the actual translated files corresponding to the requested `targetId`s. The data for each file will be in an **encoded format** (e.g., Base64), ready for you to decode and save.
 
-#### `submissionId`
+### **Next Step: Acknowledgment**
 
-This is a unique integer that identifies the submission batch sent to the translation team. A single `submissionId` can be associated with multiple `targetId`s. For example, if you want two target languages for a single file to be reviewed by the same person, you should separate them with a **pipe symbol (`|`)** in your initial request. This will ensure both resulting `targetId`s are grouped under the same `submissionId`.
-
-#### `dueDate`
-
-This is the due date timestamp in Epoch milliseconds, reflecting the same value you provided in the original submission request.
-
-#### `jobId` & `documentId`
-
-These are unique numerical identifiers stored in our database that correspond to this particular file. They are used for internal tracking purposes and are generally not needed by the client.
-
-#### `sourceFileName` & `targetLanguage`
-
-These fields specify the original name of the source file and the specific target language this response object pertains to. Even if your request included multiple languages, each response object will only list the single `targetLanguage` associated with its `targetId`.
-
-#### `FileFormatName` & `sourceLanguage`
-
-These fields reflect the file format and source language that were provided in the original submission request.
-
-#### `targetFileName`
-
-This is the generated name for the translated file. The naming convention is to take the `sourceFileName` and append an underscore (`_`) followed by the `targetLanguage` code.
-
-#### `lastModified`
-
-This is an ISO 8601 formatted timestamp that is updated every time the `status` of the job changes. This allows you to track the most recent activity for this translation.
-
-#### `submissionName`
-
-This is the name of the submission batch. It is created by taking the `submissionName` you provided in the request and appending an underscore (`_`) followed by the `targetLanguage`. This is because each submission sent to the translation provider (TransPerfect) is linked to a single target language.
-
-#### `batchName`
-
-This is a field used for internal service logic, primarily to identify unique sets of files for download from the translation provider. The name is typically constructed from the original batch name followed by the source and target language codes. This field is not intended for client use.
+Once you have successfully received and processed the downloaded files, you should use the list of `targetId`s in a subsequent acknowledgment call to confirm receipt.
