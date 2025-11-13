@@ -1,45 +1,13 @@
-Of course. Here is the API documentation for the download endpoint based on your description.
+I am running into a critical issue identifying benchmarks while working with the dbo.characteristics_mapping_table.
 
------
+Missing Identifier: The dbo.characteristics_mapping_table does not appear to contain a dedicated benchmark identifier column. This prevents me from definitively linking a characteristic to a specific benchmark.
 
-## **API Documentation: Download Translated Files**
+Question: How should we identify the correct benchmark based only on the available columns in this mapping table?
 
-### **Overview 📥**
+Proposal for Review: Should we temporarily retrieve all benchmarks associated with a given product_id and process the data?
 
-This endpoint is used to download the content of one or more translated files. After you have identified which files are ready by using the **Get Submission Status** endpoint, you can pass their `targetId`s to this endpoint to retrieve the actual file data.
+Missing Data for Products: I've observed that a significant number of product_ids lack entries in the benchmark table, and corresponding column names are also missing.
 
-### **Request Body Structure**
+Question: What is the established procedure for handling these products? Should we assume no benchmark exists, or is there an alternative source we should be using?
 
-The request requires a JSON object containing your `userId` and a list of `targetId`s for the files you wish to download.
-
-```json
-{
-  "userId": "vikramad",
-  "targetIds": [
-    "22621",
-    "22622"
-  ]
-}
-```
-
------
-
-### **Attribute Definitions**
-
-#### `userId`
-
-This is a **required** string that identifies you as the client. It ensures you only receive files associated with your account.
-
-#### `targetIds`
-
-This is a **required** array of strings, where each string is a `targetId` corresponding to a translated file you want to download.
-
-**Constraint**: You can include a maximum of **25** `targetId`s in a single request. If you need to download more than 25 files, you must send multiple requests.
-
-### **Response**
-
-A successful response will contain the actual translated files corresponding to the requested `targetId`s. The data for each file will be in an **encoded format** (e.g., Base64), ready for you to decode and save.
-
-### **Next Step: Acknowledgment**
-
-Once you have successfully received and processed the downloaded files, you should use the list of `targetId`s in a subsequent acknowledgment call to confirm receipt.
+Your guidance on how to identify and validate the correct benchmark in these situations is critical to proceeding with the data task.
