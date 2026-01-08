@@ -1,13 +1,81 @@
-I am running into a critical issue identifying benchmarks while working with the dbo.characteristics_mapping_table.
+Time to First Working (Requirements to first runnable outcome): ~1 Day (Clarification + Coding).
 
-Missing Identifier: The dbo.characteristics_mapping_table does not appear to contain a dedicated benchmark identifier column. This prevents me from definitively linking a characteristic to a specific benchmark.
+Total Dev Time (Requirement -> code completed -> PR): ~1 to 1.5 Days total.
 
-Question: How should we identify the correct benchmark based only on the available columns in this mapping table?
+Time spent per phase:
 
-Proposal for Review: Should we temporarily retrieve all benchmarks associated with a given product_id and process the data?
+Requirement clarification: 1 to 2 hours.
 
-Missing Data for Products: I've observed that a significant number of product_ids lack entries in the benchmark table, and corresponding column names are also missing.
+Implementation: Max 1 Day (Manual coding).
 
-Question: What is the established procedure for handling these products? Should we assume no benchmark exists, or is there an alternative source we should be using?
+Fixing Bugs/Rework: 1 to 3 hours.
 
-Your guidance on how to identify and validate the correct benchmark in these situations is critical to proceeding with the data task.
+Testing/Validation: 30 minutes to 1 hour.
+
+Number of iterations before "Acceptable": 0 to 1 iteration.
+
+Time per change (Small change -> how long to implement + test): Less than 2 hours.
+
+Bug Categories:
+
+Logic Errors: Yes.
+
+Missed Requirements: No.
+
+Config/integration errors: No.
+
+Regression Issue: No.
+
+Time Spent Debugging: 15 to 30 minutes.
+
+Bus Factor (If primary Dev is out, how long does it take someone else to take over?): High/Slow.
+
+Documentation Quality: Low/Delayed.
+
+Consistency in implementation: 90-95%.
+
+Manual Testing: 30 minutes to 1 hour.
+
+Effort Split % coding vs rework: 80% Coding / 20% Rework.
+
+After, i.e. with spec based development:
+
+Time to First Working Requirements to first runnable outcome: ~2 to 2.5 Hours (Clarification + Spec Prep + Generation).
+
+Total Dev Time (Requirement -> code completed -› PR): ~3 to 5 Hours total.
+
+Time spent per phase:
+
+Requirement clarification: 1 to 2 hours.
+
+Implementation: 30 to 50 minutes (Includes 15-30 mins defining/writing requirements for the agent + 15-20 mins generation time).
+
+Fixing Bugs/Rework: ~10 minutes (Regenerating files).
+
+Testing/Validation: 30 minutes to 1 hour.
+
+Number of iterations before "Acceptable": 2 to 3 iterations.
+
+Time per change (Small change -> how long to implement + test): Less than 10 minutes.
+
+Bug Categories:
+
+Logic Errors: Rare.
+
+Missed Requirements: High initially (Requires re-prompting).
+
+Config/integration errors: Yes (Schema mapping/paths).
+
+Regression Issue: No.
+
+Time Spent Debugging: 5 to 10 minutes (Quick ID, but manual verify required).
+
+Bus Factor (If primary Dev is out, how long does it take someone else to take over?): Low/Fast.
+
+Documentation Quality: High/Instant.
+
+Consistency in implementation: 100%.
+
+Manual Testing: 30 minutes to 1 hour.
+
+Effort Split % coding vs rework: 10% Coding / 90% Spec Definition & Rework.
