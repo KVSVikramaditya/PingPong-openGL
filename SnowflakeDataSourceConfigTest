@@ -1,81 +1,39 @@
-Time to First Working (Requirements to first runnable outcome): ~1 Day (Clarification + Coding).
+Time to First Working (Requirements to first runnable outcome) 1 – 2.5 hours
 
-Total Dev Time (Requirement -> code completed -> PR): ~1 to 1.5 Days total.
-
-Time spent per phase:
- 
-Requirement clarification: 1 to 2 hours.
-
-Implementation: Max 1 Day (Manual coding).
-
-Fixing Bugs/Rework: 1 to 3 hours.
-
-Testing/Validation: 30 minutes to 1 hour.
-
-Number of iterations before "Acceptable": 0 to 1 iteration.
-
-Time per change (Small change -> how long to implement + test): Less than 2 hours.
-
-Bug Categories:
-
-Logic Errors: Yes.
-
-Missed Requirements: No.
-
-Config/integration errors: No.
-
-Regression Issue: No.
-
-Time Spent Debugging: 15 to 30 minutes.
-
-Bus Factor (If primary Dev is out, how long does it take someone else to take over?): High/Slow.
-
-Documentation Quality: Low/Delayed.
-
-Consistency in implementation: 90-95%.
-
-Manual Testing: 30 minutes to 1 hour.
-
-Effort Split % coding vs rework: 80% Coding / 20% Rework.
-
-After, i.e. with spec based development:
-
-Time to First Working Requirements to first runnable outcome: ~2 to 2.5 Hours (Clarification + Spec Prep + Generation).
-
-Total Dev Time (Requirement -> code completed -› PR): ~3 to 5 Hours total.
+Total Dev Time (Requirement -> code completed -> PR) 1.5 – 3.5 hours
 
 Time spent per phase:
 
-Requirement clarification: 1 to 2 hours.
+Requirement clarification: 30 mins – 2 hours (Includes detailed Spec/Prompt writing)
 
-Implementation: 30 to 50 minutes (Includes 15-30 mins defining/writing requirements for the agent + 15-20 mins generation time).
+Implementation: ~30 mins
 
-Fixing Bugs/Rework: ~10 minutes (Regenerating files).
+Fixing Bugs/Rework: 15 – 30 mins
 
-Testing/Validation: 30 minutes to 1 hour.
+Testing/Validation: 15 – 30 mins
 
-Number of iterations before "Acceptable": 2 to 3 iterations.
+Number of iterations before "Acceptable" (how many times if any code was revised after inital implementation) 2 – 3 times
 
-Time per change (Small change -> how long to implement + test): Less than 10 minutes.
+Time per change (Small change -> how long to implement + test) Fast (< 5 mins)
 
 Bug Categories:
 
-Logic Errors: Rare.
+Logic Errors: Near 0 (Rare)
 
-Missed Requirements: High initially (Requires re-prompting).
+Missed Requirements: Common (Due to prompt omissions)
 
-Config/integration errors: Yes (Schema mapping/paths).
+Config/integration errors: Low
 
-Regression Issue: No.
+Regression Issue (Did change break existing functionality): Occasional risk
 
-Time Spent Debugging: 5 to 10 minutes (Quick ID, but manual verify required).
+Time Spent Debugging Low
 
-Bus Factor (If primary Dev is out, how long does it take someone else to take over?): Low/Fast.
+Bus Factor (If primary Dev is out, how long does it take someone else to take over?) High (The Spec file acts as immediate documentation for others)
 
-Documentation Quality: High/Instant.
+Documentation Quality High (The Spec itself serves as the documentation)
 
-Consistency in implementation: 100%.
+Consistency in implementation High
 
-Manual Testing: 30 minutes to 1 hour.
+Manual Testing Reduced (Agent can often generate test scripts)
 
-Effort Split % coding vs rework: 10% Coding / 90% Spec Definition & Rework.
+Effort Split (% coding vs rework) 60% Spec Writing & Reqs / 20% Implementation / 20% Fixes
