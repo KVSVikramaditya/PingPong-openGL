@@ -1,10 +1,52 @@
+Without Spec-Based Agent Development (Manual)
+Time to First Working (Requirements to first runnable outcome) 2 – 3 hours
+
+Total Dev Time (Requirement -> code completed -> PR) 2.75 – 4.5 hours
+
+Time spent per phase:
+
+Requirement clarification: 30 mins – 1 hour
+
+Implementation: 1.5 – 2 hours
+
+Fixing Bugs/Rework: 30 mins – 1 hour
+
+Testing/Validation: 15 – 30 mins
+
+Number of iterations before "Acceptable" (how many times if any code was revised after inital implementation) 2 – 3 times
+
+Time per change (Small change -> how long to implement + test) 20 – 30 mins
+
+Bug Categories:
+
+Logic Errors: Common (Human error)
+
+Missed Requirements: Common
+
+Config/integration errors: Occasional
+
+Regression Issue (Did change break existing functionality): Occasional
+
+Time Spent Debugging Moderate
+
+Bus Factor (If primary Dev is out, how long does it take someone else to take over?) Low
+
+Documentation Quality Variable / Low
+
+Consistency in implementation Variable
+
+Manual Testing Required
+
+Effort Split (% coding vs rework) 60% Coding / 20% Reqs / 20% Fixes
+
+With Spec-Based Agent Development
 Time to First Working (Requirements to first runnable outcome) 1 – 2.5 hours
 
 Total Dev Time (Requirement -> code completed -> PR) 1.5 – 3.5 hours
 
 Time spent per phase:
 
-Requirement clarification: 30 mins – 2 hours (Includes detailed Spec/Prompt writing)
+Requirement clarification: 30 mins – 2 hours
 
 Implementation: ~30 mins
 
@@ -28,12 +70,12 @@ Regression Issue (Did change break existing functionality): Occasional risk
 
 Time Spent Debugging Low
 
-Bus Factor (If primary Dev is out, how long does it take someone else to take over?) High (The Spec file acts as immediate documentation for others)
+Bus Factor (If primary Dev is out, how long does it take someone else to take over?) High
 
-Documentation Quality High (The Spec itself serves as the documentation)
+Documentation Quality High
 
 Consistency in implementation High
 
-Manual Testing Reduced (Agent can often generate test scripts)
+Manual Testing Reduced
 
 Effort Split (% coding vs rework) 60% Spec Writing & Reqs / 20% Implementation / 20% Fixes
