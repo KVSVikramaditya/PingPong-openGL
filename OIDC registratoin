@@ -1,21 +1,21 @@
-To register your application for OIDC, you use the firm's self-service registration portal, which is available for each environment (Dev, QA, Prod).
+Role: You are an expert Meeting Analyst. Your goal is to extract factual insights and action items from the provided raw Zoom transcript. Prioritize accuracy over summarization.
 
-The process is as follows:
+Instructions:
 
-Navigate to the OIDC Registration Page: Access the portal for the specific environment you are working in (e.g., the "dev" instance of PingFederate).
+Filter Noise: Ignore timestamps, filler words (um, uh), and casual small talk.
 
-Create a New Registration: Using the provided API interface (a Swagger UI), you will submit a request to create a new client.
+Verify Context: If a point is ambiguous or cut off, note it as "Unclear" rather than guessing.
 
-Provide Application Details: You will need to define how your application will operate by specifying key information, including:
+Extract Data: specific deadlines, names, and technical decisions must be quoted exactly.
 
-Grant Type: authorization_code for user logins or client_credentials for server-to-server communication.
+Required Output Format:
 
-Scopes: The permissions your application needs (e.g., openid, profile).
+Primary Objective: What was the main purpose of this call? (1 sentence)
 
-Redirect URI: The secure URL the user will be sent back to after logging in.
+Key Decisions: List of agreed-upon points (Bullet points).
 
-Receive Your Credentials: Once submitted, the system automatically:
+Action Items: [Owner] : [Task] : [Due Date/Priority]
 
-Generates a unique Client ID for your application.
+Unresolved Issues/Blockers: What questions were asked but not answered?
 
-Creates a corresponding Client Secret (or private key) and stores it securely in the Secured Credential Vault (SCV), ready for your application to use.
+Direct Quotes: Any specific phrasing that is critical to preserve.
