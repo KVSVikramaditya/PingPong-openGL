@@ -1,81 +1,536 @@
-Without Spec-Based Agent Development (Manual)
-Time to First Working (Requirements to first runnable outcome) 2 – 3 hours
+Speaker 1 (Manashi): Okay.
 
-Total Dev Time (Requirement -> code completed -> PR) 2.75 – 4.5 hours
+Speaker 1 (Manashi): So, here we have two scenarios... three scenarios. Okay?
 
-Time spent per phase:
+Speaker 1 (Manashi): Number one is where we publish the aggregation data. Okay? Sorry, account data.
 
-Requirement clarification: 30 mins – 1 hour
+Speaker 2 (Vikram): Okay.
 
-Implementation: 1.5 – 2 hours
+Speaker 1 (Manashi): Okay. Then account has a benchmark, okay? Then we publish benchmark data.
 
-Fixing Bugs/Rework: 30 mins – 1 hour
+Speaker 2 (Vikram): Okay.
 
-Testing/Validation: 15 – 30 mins
+Speaker 1 (Manashi): Okay. Can you tell again, Manashi? I just lost the screen for a minute.
 
-Number of iterations before "Acceptable" (how many times if any code was revised after inital implementation) 2 – 3 times
+Speaker 1 (Manashi): Yeah. So here we have two scenarios, three scenarios. Okay? Four scenarios, actually. Where we publish the account data, then we publish the benchmark data, then we publish the composite data. And the fourth one is where we publish the fund and benchmark data side-by-side.
 
-Time per change (Small change -> how long to implement + test) 20 – 30 mins
+Speaker 2 (Vikram): Oh, okay.
 
-Bug Categories:
+Speaker 1 (Manashi): Okay.
 
-Logic Errors: Common (Human error)
+Speaker 1 (Manashi): Okay. So, the data for account, it comes from the aggregation table.
 
-Missed Requirements: Common
+Speaker 2 (Vikram): Okay.
 
-Config/integration errors: Occasional
+Speaker 1 (Manashi): The data for benchmark, it comes from an index aggregation table.
 
-Regression Issue (Did change break existing functionality): Occasional
+Speaker 2 (Vikram): Hmm, okay.
 
-Time Spent Debugging Moderate
+Speaker 1 (Manashi): The data for composite, it comes from account data only. But like on holdings, we used to replace it with the composite ID at runtime, the same way we do it here.
 
-Bus Factor (If primary Dev is out, how long does it take someone else to take over?) Low
+Speaker 2 (Vikram): Okay. So, we get it from the aggregation table only.
 
-Documentation Quality Variable / Low
+Speaker 1 (Manashi): Right.
 
-Consistency in implementation Variable
+Speaker 1 (Manashi): Just a minute.
 
-Manual Testing Required
+Speaker 1 (Manashi): Yes, Vikram.
 
-Effort Split (% coding vs rework) 60% Coding / 20% Reqs / 20% Fixes
+Speaker 2 (Vikram): Yeah.
 
-With Spec-Based Agent Development
-Time to First Working (Requirements to first runnable outcome) 1 – 2.5 hours
+Speaker 1 (Manashi): Okay. And the fourth one is where we publish the side-by-side data and it comes from a join of aggregation and index aggregation. Okay?
 
-Total Dev Time (Requirement -> code completed -> PR) 1.5 – 3.5 hours
+Speaker 2 (Vikram): Oh, okay.
 
-Time spent per phase:
+Speaker 1 (Manashi): Okay. So, now I'll... It's a simple, I mean, simple code only. Nothing very fancy. But I've now... I've put it for review. So let's start from here. I mean, if I'll explain one code, then your other code will also work.
 
-Requirement clarification: 30 mins – 2 hours
+Speaker 2 (Vikram): Okay.
 
-Implementation: ~30 mins
+Speaker 1 (Manashi): So, this is Get Characteristic Details V2's. The same is for Characteristic Details. So here, we have three different queries. One query is where I'm getting both data.
 
-Fixing Bugs/Rework: 15 – 30 mins
+Speaker 2 (Vikram): Okay.
 
-Testing/Validation: 15 – 30 mins
+Speaker 1 (Manashi): Then one query is where I'm just getting aggregation data.
 
-Number of iterations before "Acceptable" (how many times if any code was revised after inital implementation) 2 – 3 times
+Speaker 2 (Vikram): Okay.
 
-Time per change (Small change -> how long to implement + test) Fast (< 5 mins)
+Speaker 1 (Manashi): And the third is where I'm getting the index aggregation data.
 
-Bug Categories:
+Speaker 2 (Vikram): Oh, the benchmark.
 
-Logic Errors: Near 0 (Rare)
+Speaker 1 (Manashi): Yeah, this is for benchmark. Okay? Now, how do we decide if it's our aggregation or index aggregation? That depends on the stat code. And how do we decide for the both? We have one table on our side, which is the EV Seismic table.
 
-Missed Requirements: Common (Due to prompt omissions)
+Speaker 2 (Vikram): Okay.
 
-Config/integration errors: Low
+Speaker 1 (Manashi): Which we have maintained here. Here, there's include fund benchmark side-by-side. Wherever this is Y, only in that case will this 'both' query be called. Otherwise, it won't be called.
 
-Regression Issue (Did change break existing functionality): Occasional risk
+Speaker 2 (Vikram): So we are doing it for each individual account. Like we will execute the query for each individual account?
 
-Time Spent Debugging Low
+Speaker 1 (Manashi): Right.
 
-Bus Factor (If primary Dev is out, how long does it take someone else to take over?) High
+Speaker 2 (Vikram): Okay.
 
-Documentation Quality High
+Speaker 1 (Manashi): Just a minute, Vikram. Just a minute. Guests are outside. Just a minute.
 
-Consistency in implementation High
+Speaker 2 (Vikram): Oh, sure.
 
-Manual Testing Reduced
+Speaker 1 (Manashi): Yeah. Sorry, Vikram. Okay?
 
-Effort Split (% coding vs rework) 60% Spec Writing & Reqs / 20% Implementation / 20% Fixes
+Speaker 2 (Vikram): Yes, Manashi.
+
+Speaker 1 (Manashi): Yeah. So here, what I have done is, here I have put a query.
+
+Speaker 2 (Vikram): Hmm.
+
+Speaker 1 (Manashi): Okay. Where I'm calling a query. I mean, based on my flag. A flag 'Y' means I'm calling the both data, and 'N' means I'm calling only the index and aggregation data.
+
+Speaker 2 (Vikram): Okay. Okay.
+
+Speaker 1 (Manashi): And the third column is... another one I've added in the EV aggregation type is override composite. For whichever account I want the composite, I have put that composite's value here.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Okay. And here, down in this code, I'm just creating a row and after that row, I am replacing the composite.
+
+Speaker 2 (Vikram): Oh, okay. So, it should also work if we need both Entity ID and Composite ID then?
+
+Speaker 1 (Manashi): Right. It will... This code will work for everything. Okay?
+
+Speaker 2 (Vikram): Oh, okay, okay.
+
+Speaker 1 (Manashi): Okay. So, this is the code.
+
+Speaker 2 (Vikram): Hmm, okay.
+
+Speaker 1 (Manashi): And yeah, the... and the most important thing which I forgot to tell... Here, my entry that will be maintained, okay? EV this one. Whatever entry is maintained, then these values come in our aggregation table.
+
+Speaker 2 (Vikram): Okay. I mean, like in our feed file when we generate?
+
+Speaker 1 (Manashi): No, no, no. Here we have an aggregation table.
+
+Speaker 2 (Vikram): Okay, in DDR, okay.
+
+Speaker 1 (Manashi): Yeah, in DDR. So, if I run this...
+
+Speaker 1 (Manashi): Then we get this aggregation ID.
+
+Speaker 2 (Vikram): Hmm.
+
+Speaker 1 (Manashi): On the basis of this aggregation ID and whatever its P360 ID is, I pass this ID and P360 product ID, then I get these aggregation names.
+
+Speaker 2 (Vikram): Hmm, okay.
+
+Speaker 1 (Manashi): Okay. And how is its mapping maintained? Its mapping is being maintained... Ashish shared this sheet with me, which I'll share with you. Like, here, for example, in P360, its aggregation ID is TH. But in GDR, it will be TX. So, wherever you feel the data isn't coming, that can be a scenario where the entry I've created here is incorrect. At my end, on this table.
+
+Speaker 1 (Manashi): Okay?
+
+Speaker 1 (Manashi): Like here, TH is passed. So, it has to be TX. Then it will start working if there's data in our aggregation table.
+
+Speaker 2 (Vikram): Hmm. Okay. So... can you tell again that for one ID? So in our... in the aggregation table on the DDR side, they'll maintain TH, but we have to print out...
+
+Speaker 1 (Manashi): No, no, no.
+
+Speaker 1 (Manashi): No. What will happen is that TH was maintained on P360, but now all IDs have changed in DDR. So everything is being maintained manually. So, let's say I take an example.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Like this 5231. Let's say its product P360 product ID is 64. Okay?
+
+Speaker 1 (Manashi): So, I got this GBR and its product ID is 64. Okay. P360 ID. So, I have applied logic. With this ID, with GBR, and with P360, with 64, I should get a row here.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): If I get a row here, only then am I creating an entry. Otherwise, I'm not creating anything. Everything is interlinked.
+
+Speaker 2 (Vikram): Oh, okay. So, we will first query the DDR table. From there, we'll come to our seismic to check if we have an entry or not. Okay.
+
+Speaker 1 (Manashi): Right. Right.
+
+Speaker 1 (Manashi): And after that, my IDs should be on these IDs. Let's say, by mistake, I've created with TH, but the entry in the aggregation table will be with TX. So, I have to change TH to TX in the mapping for top 10 holdings. Then the data will start flowing. I mean, these IDs, these two should be the same. On the seismic side as well, and the aggregation side that DDR will maintain. Then we will start getting the data.
+
+Speaker 2 (Vikram): Oh, okay. So we... we are only concerned about K. So we should only maintain K column IDs in our table.
+
+Speaker 1 (Manashi): Right.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Okay. I share this code with you... I told Vinay that I've pushed it. I haven't pushed it. You raise that delete PR. After doing it, I push all this. You just take a download on your end and debug it once. I'll be available until late at night. So if anything happens, just ping me. Ping me on WhatsApp. So I'll connect with you. Okay?
+
+Speaker 2 (Vikram): Oh, okay Manashi. Got it. Thank you.
+
+Speaker 1 (Manashi): Okay, Vikram. Thank you.
+
+Speaker 2 (Vikram): Okay, Manashi. Got it. Thanks.
+
+Speaker 1 (Manashi): Thank you.
+
+Speaker 2 (Vikram): No, I'll just re-go through the code. Let me ping you again. And I'll be as-if for the... those two files.
+
+Speaker 2 (Vikram): Okay. Okay.
+
+Speaker 2 (Vikram): And the guests are here as well. Let me check the order...
+
+Speaker 2 (Vikram): Oh, okay.
+
+Speaker 2 (Vikram): Sure.
+
+
+Speaker 1 (Manashi): Is it in the entry or not?
+
+Speaker 1 (Manashi): Okay. So this, rather than troubleshooting everything, is like the best thing I have made in terms of many accounts, but still, somewhere something is pending.
+
+Speaker 2 (Vikram): Okay. So whatever we have in the mapping sheet, we have to make sure we have this table.
+
+Speaker 1 (Manashi): Yeah. So here it is, if you see, for 702.
+
+Speaker 1 (Manashi): Okay, 702. The product GDR aggregation ID is TX for TH holding.
+
+Speaker 1 (Manashi): Okay. But here it is still TH, okay. So just make it TH, okay.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): For asset mix, it is SX.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): So just make it over here as SX, and for GIC, it is SB. Just make it SB over here.
+
+Speaker 2 (Vikram): Okay, okay. I can do that. Is it that for every account we have to make sure we have to update this?
+
+Speaker 1 (Manashi): Yeah, right. And you have to do one more thing. Like if you see this is the 702 account, so remember you shared one file with me, this is the data source. So just check along when you pass this account over here.
+
+Speaker 1 (Manashi): Okay, P360. So do we even have a 702 account? No, we don't have. Okay. So just check whatever account you are using, do we have any attached... Is that a composite or not? And what is the rep account attached to it?
+
+Speaker 2 (Vikram): Okay, okay.
+
+Speaker 1 (Manashi): Okay. So if there is any composite related to that account, just update the override composite column with those composites.
+
+Speaker 2 (Vikram): This should be Rep account ID, right? Override composite.
+
+Speaker 1 (Manashi): This should be the Composite ID.
+
+Speaker 2 (Vikram): Oh, Composite ID, got it, got it.
+
+Speaker 1 (Manashi): Okay.
+
+Speaker 2 (Vikram): Yes. Also, Vinay was mentioning about that name, right? The name that we are going to use. You were also saying yesterday regarding that top 10 issuers or top 10 holdings.
+
+Speaker 1 (Manashi): Yeah, so what is that? That is only required for the V2 file, okay? That is not required for this one, what we call it, Characteristic details file. That is only required for V2. So wherever top 10 holding is there in V2.
+
+Speaker 1 (Manashi): This is the V2 file. Okay. In the data item alias, instead of top 10 holdings, it should come as top N holdings, okay?
+
+Speaker 2 (Vikram): Okay. Yeah.
+
+Speaker 1 (Manashi): So I guess this will be happening for each and every account, okay? Just check it in the P360 file. If it is happening, then in the processor just update the name. Wherever it is top 10 holdings, just update to top N holdings. It will resolve the issue.
+
+Speaker 2 (Vikram): Okay, so this is only for this data item name or any other names we have to...?
+
+Speaker 1 (Manashi): No, no, no. This is only for top 10 holdings, none other than that. And the data item alias will be top N holdings.
+
+Speaker 2 (Vikram): Oh, okay.
+
+Speaker 1 (Manashi): Okay. And there is one more issue.
+
+Speaker 1 (Manashi): Which you don't have to do anything about, you just have to connect to Shikha. So there is one table, which is Data Aggregation Data Control.
+
+Speaker 2 (Vikram): Okay, aggregation data control.
+
+Speaker 1 (Manashi): Yeah. This is the table. Okay, I'll show you the structure of this table. So this table controls the data order of every stat code and every aggregation ID.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Okay, so how our logic works is, first of all, I go and find if it's an account.
+
+Speaker 1 (Manashi): I'll go and find, let's say if I'm considering this one. So in this aggregation table, for a particular stat code, here we have the entries, okay? If a list order is coming, then that is fine. We take it from here.
+
+Speaker 2 (Vikram): So after we get the data from that aggregation table, we come here and check for that...
+
+Speaker 1 (Manashi): No, this is in the aggregation table only. This list order is a part of the aggregation table.
+
+Speaker 2 (Vikram): Oh, okay.
+
+Speaker 1 (Manashi): Okay. Okay.
+
+Speaker 2 (Vikram): Okay, if we have it here, we take it from here, the list order.
+
+Speaker 1 (Manashi): If we have a list order over here, we'll take it from here, okay?
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Let's say it is zero over here, okay?
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): There are many cases where the list order is zero. So in that case, we go and check in the data control table, Aggregation Data Control.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Based on the stat code, aggregation ID, and display value.
+
+Speaker 1 (Manashi): So there we get a sort order. Let's say, for this account, we don't have an entry in the aggregation data control table, okay?
+
+Speaker 1 (Manashi): Then in that case, what I will do? Let's say, just giving you an example, I have these three.
+
+Speaker 1 (Manashi): Let's say, for this one, it's 0, 0, 0.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Okay, and here we don't have an entry. Then again, for this particular stat code, I check that I also don't have an entry for this stat code in the data control table.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Then what I'm doing is my fallback logic. Based on the descending order, I give an ID, that is 1, 2, and 3.
+
+Speaker 2 (Vikram): So based on the percentage value, right?
+
+Speaker 1 (Manashi): Yeah, based on the percentage value, I am putting these values.
+
+Speaker 2 (Vikram): Okay. And you're checking this in the aggregation table only. Okay, okay.
+
+Speaker 1 (Manashi): Yeah, aggregation and index aggregation. If it's an account, then aggregation. If it's a benchmark, then index aggregation.
+
+Speaker 2 (Vikram): I have a question, Manashi. So these list orders are for the aggregation IDs, right?
+
+Speaker 1 (Manashi): Right.
+
+Speaker 2 (Vikram): So it's not like for these IAs, IANs, and IVAs, there will be one list order as one and the remaining two as zero. Those cases don't exist, right?
+
+Speaker 2 (Vikram): It's either all zeros or you will get a list order.
+
+Speaker 1 (Manashi): Yeah, that is the case. They won't be mixed. Either it will be all zero, or there will be an entry, either in this table or in that table.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): So in my case, I gave this one, this two, and this three, which is correct. But now in P360, what's happening? The one with 99.04 is 1, the one with 0.46 is 2, and the one with 0.5 is 3.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Because of which there's an issue on the template. So we just have to do... Pradeep will tell you about all these cases. Just drop a mail or message to him in the group.
+
+Speaker 1 (Manashi): He should give you the entire summary. Then we just have to ask Shikha to make an entry in that data control aggregation data control for these three specifically.
+
+Speaker 2 (Vikram): Oh, okay. So for these three and for the stat code, we have to make sure they sort them in the right order.
+
+Speaker 1 (Manashi): Yeah, the one in P360. Wherever the order mismatch is occurring, in those cases, we will have to get an entry made by the DDR team. Ashish is on leave. When he returns, you can talk to him. Otherwise, we have to talk to Shikha.
+
+Speaker 1 (Manashi): So this is an outstanding question, okay?
+
+Speaker 2 (Vikram): Okay, so we determine that order by taking it from the P360 file, right? Or do they know it?
+
+Speaker 1 (Manashi): Right. We will have to tell them. They won't know it. We'll have to tell them that entries have to be made in this way.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Yeah. So these are the three things which you have to check. First of all, all the entries for both EQU and FI should be there with the correct GDR one.
+
+Speaker 1 (Manashi): When all these are completed, then just take the entries from NYTD and push them to QD.
+
+Speaker 2 (Vikram): Got it.
+
+Speaker 1 (Manashi): The second one is that you have to replace top 10 with top N.
+
+Speaker 1 (Manashi): But only in Characteristics V2.
+
+Speaker 2 (Vikram): V2. Okay.
+
+Speaker 1 (Manashi): Yeah. Okay. And the third is...
+
+Speaker 2 (Vikram): Yeah, for whatever we are getting a wrong order, Pradeep will report it to us. Whatever Pradeep reports to us, we have to request them, right?
+
+Speaker 1 (Manashi): Yes.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Okay. And there will be one more scenario. Right now we don't have the aggregation data. I don't know if that aggregation data arrives by the time I return. I'll just explain it to you. That's also a very simple thing. Its coding has been done.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): There is nothing to be done in that. It was also working until we didn't have the data pulled.
+
+Speaker 1 (Manashi): I'll explain that to you as well.
+
+Speaker 1 (Manashi): Here, for example, are these scenarios. Okay?
+
+Speaker 1 (Manashi): Where fund to benchmark and benchmark values are appearing side-by-side. Okay?
+
+Speaker 1 (Manashi): If, let's say, the QA team raises some such issue like we are not getting fund to benchmark and this scenario side-by-side, okay, values are not coming, then in that case you don't have to do much. Here, the table we have in NYTD...
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): This one, okay. Make this column Y. Let's say, for this particular account, for top 10 holdings, like let's say its P360 product ID is this only, 702. Now, for top 10 holdings, I want both fund value and benchmark value.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Okay, so in that case, just put a Y in front of this column.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): It will start working.
+
+Speaker 2 (Vikram): Okay. If, let's say, some such issue arises.
+
+Speaker 1 (Manashi): Right now we don't have aggregation... sorry, benchmark data, so we don't know if this issue will arise or not. Once we have that data, then we can see.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Okay. Vikram, any other question?
+
+Speaker 2 (Vikram): Yeah. Okay, this is a different one. For QA, like Ajay connected to me, he mentioned that for two IDs he explained... If you open any file... I just want to know if that's an issue we can look into or it's from upstream. Characteristic details or V2.
+
+Speaker 1 (Manashi): Okay.
+
+Speaker 2 (Vikram): In this, 5655 account.
+
+Speaker 1 (Manashi): Okay. It's not there.
+
+Speaker 2 (Vikram): Okay. You can just go for that 4 benchmark, the first one.
+
+Speaker 2 (Vikram): In that, for the data item ID 133, in column E, if you filter on 133.
+
+Speaker 1 (Manashi): Okay.
+
+Speaker 2 (Vikram): Yes. For this Asset by Country, he showed there were like a few duplicate values.
+
+Speaker 2 (Vikram): Can you sort on column H?
+
+Speaker 2 (Vikram): Yeah, so this should not be an issue, right? If you take the first two rows, it is 36 Australia and again it's 13 Australia.
+
+Speaker 1 (Manashi): Okay. Which account ID is this 4 benchmark linked to?
+
+Speaker 2 (Vikram): Sorry?
+
+Speaker 1 (Manashi): Which account is this 4 benchmark linked to? Any idea?
+
+Speaker 2 (Vikram): Not sure.
+
+Speaker 1 (Manashi): I'm just checking from here.
+
+Speaker 1 (Manashi): There is no fund to benchmark here.
+
+Speaker 2 (Vikram): Oh, okay.
+
+Speaker 1 (Manashi): It's all...
+
+Speaker 1 (Manashi): Let's see in this. Why should I search so much?
+
+Speaker 1 (Manashi): Okay, this is 1105.
+
+Speaker 1 (Manashi): Now I'll have to see its stat code.
+
+Speaker 1 (Manashi): These are all of them.
+
+Speaker 1 (Manashi): We'll have to see which product ID among these...
+
+Speaker 1 (Manashi): Do we have some such mapping by which we can find out which account is linked, which MCIM is linked?
+
+Speaker 2 (Vikram): No, not sure.
+
+Speaker 1 (Manashi): I guess it's this only, 116508. So here, its stat code will have to be seen.
+
+Speaker 1 (Manashi): They don't have Asset by Country data in the aggregation.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Okay?
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): So then it will be the same thing, what I feel, that one account is linked to multiple benchmarks, right?
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Yes, that will be a scenario. What I feel is that one account is linked to multiple benchmarks.
+
+Speaker 1 (Manashi): Yes, that will be a scenario, what I feel.
+
+Speaker 1 (Manashi): Yes, if you can see, multiple accounts are coming against one benchmark, right?
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): So then for every benchmark, it will go to get that stat code data, right?
+
+Speaker 2 (Vikram): For every...
+
+Speaker 1 (Manashi): Right. Unless they are not publishing the GMR ID, it will go to get it. So I don't think so. You can discuss this with Vinay. This is not an issue.
+
+Speaker 1 (Manashi): Okay?
+
+Speaker 2 (Vikram): Okay. Pradeep raised this concern because his template side, this is throwing an error.
+
+Speaker 1 (Manashi): That it will definitely throw. That's what I'm talking about. We have to talk to Vinay then, on the behalf of which GMR ID we call it, or change the query. We should have some linkage, right, that only this benchmark ID should be used.
+
+Speaker 2 (Vikram): Okay. This is what you said, right? That for each product there are multiple benchmarks associated.
+
+Speaker 1 (Manashi): Right.
+
+Speaker 2 (Vikram): And for each benchmark it is trying to get this.
+
+Speaker 1 (Manashi): Right. For each account, it is trying to get the benchmark data. That's why it is coming double-double.
+
+Speaker 2 (Vikram): But for this benchmark 4, so this is not the benchmark data, you are saying this is the product ID data.
+
+Speaker 1 (Manashi): Yeah, so here if I'm saying, there will be separate data for a product ID, right?
+
+Speaker 1 (Manashi): Let's say if I take this 116508.
+
+Speaker 1 (Manashi): There is no Asset by Country data here in the aggregation.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 2 (Vikram): Okay, Manashi. So if...
+
+Speaker 1 (Manashi): Or else we can do this. Do we even need Asset by Country for this account and this benchmark? If not, then we delete its mapping.
+
+Speaker 2 (Vikram): Oh, Asset Mix's.
+
+Speaker 1 (Manashi): Okay?
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Any other question, Vikram?
+
+Speaker 2 (Vikram): No. Yeah. Okay, I'll look into it then. One thing is, when I run it locally, I don't have access to one table in UAT. I just realized it now. I sent a message to Shikha. Maybe she'll accept it on Monday morning.
+
+Speaker 1 (Manashi): Okay.
+
+Speaker 2 (Vikram): So can you share that UAT file with me, the one after you made a change just now, right? If you share that file with me...
+
+Speaker 1 (Manashi): Yeah, I have made... I'll share that file with you. I have fixed those issues. I'll share that file with you.
+
+Speaker 2 (Vikram): That fix is regarding the duplicate, the three times we are getting that one, right?
+
+Speaker 1 (Manashi): Right.
+
+Speaker 2 (Vikram): That is for which account, Manashi?
+
+Speaker 1 (Manashi): For all the accounts.
+
+Speaker 2 (Vikram): Oh, for all the accounts.
+
+Speaker 2 (Vikram): And also the sheet that you have shared with Shikha on the issue...
+
+Speaker 1 (Manashi): That is in summary list only, that is in summary list only.
+
+Speaker 2 (Vikram): Oh, okay. So presently Shikha is working on fixing what issue exactly?
+
+Speaker 1 (Manashi): So she's currently working on fixing these ones. Okay?
+
+Speaker 2 (Vikram): Okay, sorry. You have sent me a message.
+
+Speaker 1 (Manashi): Yeah, I have sent you a message. This list.
+
+Speaker 2 (Vikram): Okay, so these are all missing on the DDR side and she's trying to source them.
+
+Speaker 1 (Manashi): Right.
+
+Speaker 2 (Vikram): Okay.
+
+Speaker 1 (Manashi): Okay?
+
+Speaker 2 (Vikram): Okay, Manashi. Thank you. Enjoy, enjoy.
+
+Speaker 1 (Manashi): Thank you, Vikram. See you soon.
+
+Speaker 2 (Vikram): Yeah, sure Manashi. Bye.
+
+Speaker 1 (Manashi): Bye.
